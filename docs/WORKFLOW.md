@@ -1,19 +1,22 @@
 # Quy trình Product Cycle
 
-Phát triển từng phần sản phẩm sử dụng được, truy vết từ yêu cầu tới bàn giao, cải thiện dựa trên bằng chứng.
+Chuẩn bị repository bằng Git, hướng dẫn chung và skill trước phân tích. Sau thiết kế/plan, thiết lập cấu trúc, runtime, coding rules, công cụ kiểm tra và phần dùng chung trước tính năng. Phát triển từng phần sản phẩm sử dụng được, truy vết từ yêu cầu tới bàn giao, cải thiện dựa trên bằng chứng.
 
 ```mermaid
 flowchart LR
  A[Phân tích] --> D[UX/UI]
  D --> T[Kỹ thuật và nhu cầu dịch vụ]
  T --> P[Kế hoạch]
- P --> B[Phát triển local theo phụ thuộc]
- P --> S[Cấu hình dịch vụ theo thiết kế]
+ subgraph DEV[Phát triển]
+ F[Chuẩn bị project và phần common] --> B[Các task tính năng]
+ B --> R[Review và kiểm tra từng đầu việc]
+ R -->|Cần sửa| B
+ end
+ P --> F
+ F --> S[Cấu hình dịch vụ theo thiết kế]
  S -->|Chỉ các việc phụ thuộc| B
  S -->|Thiếu thông tin| U[Chủ sản phẩm cấp cấu hình]
  U --> S
- B --> R[Review và kiểm tra từng đầu việc]
- R -->|Cần sửa| B
  R --> V[Kiểm chứng toàn sản phẩm local]
  V --> H[Bàn giao local]
  H --> G{Chủ sản phẩm nghiệm thu}
@@ -21,6 +24,15 @@ flowchart LR
 ```
 
 Mọi công việc có phiên thực hiện và review riêng. Sơ đồ nhấn mạnh review phát triển để dễ đọc. Dự án mới chỉ có quyết định chủ sản phẩm tại handoff; mỗi bước trước đó vẫn cần review độc lập. Cấu hình thật chỉ bắt đầu sau khi phân tích, thiết kế và plan đã hoàn tất review. Thiếu một dịch vụ không chặn các việc không phụ thuộc. VPS và phát hành ra ngoài được ghi là để sau, không phải điều kiện hoàn tất bản local. Dự án cũ giữ gate riêng.
+
+## Phân cấp trên dashboard
+
+Giữ 9 bước lớn. Bên trong Phát triển có phần chuẩn bị project/common, sau đó là các đầu việc tính năng trong plan. Mỗi công việc chứa các bước nhỏ với trạng thái và bằng chứng riêng. Chuẩn bị project/common là công việc coding thông thường, không phải một giai đoạn sản phẩm mới.
+
+- Chuẩn bị: đọc thiết kế và coding rules → cấu trúc/runtime → công cụ kiểm tra → phần dùng chung cần thiết → kiểm tra và review.
+- Từng tính năng: đọc phạm vi → thực hiện → kiểm tra → review → xác nhận kết quả.
+
+Git, hướng dẫn chung và skill được chuẩn bị lúc init. Coding rules cụ thể theo stack được chốt sau thiết kế kỹ thuật và kế hoạch; không tạo common component chưa cần dùng.
 
 ## Kết quả và truy vết
 

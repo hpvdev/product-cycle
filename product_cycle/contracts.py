@@ -6,6 +6,7 @@ from pathlib import Path
 RESOURCES = Path(__file__).parent / "resources"
 STAGES = ["analysis", "design", "architecture", "plan", "setup", "build", "verify", "handoff", "retro"]
 STAGE_TITLES = {
+    "project_setup": "Thiết lập dự án",
     "setup": "Cấu hình dịch vụ",
     "analysis": "Phân tích sản phẩm", "design": "Thiết kế UX/UI",
     "architecture": "Thiết kế kỹ thuật", "plan": "Lập kế hoạch",
@@ -13,6 +14,7 @@ STAGE_TITLES = {
     "retro": "Cải thiện quy trình",
 }
 FILES = {
+    "project_setup": ["project-setup.md"],
     "setup": ["readiness.json", "setup.md"],
     "analysis": ["analysis.md", "requirements.json"],
     "design": ["design.md", "design-baseline.json"], "architecture": ["architecture.md"],
@@ -22,6 +24,13 @@ FILES = {
 
 # Local task IDs remain stable across retries; progress is scoped to each attempt.
 WORK_STEPS = {
+    "project_setup": [
+        ("Đọc thiết kế và chốt quy tắc code", "Ghi quy tắc theo stack trước khi triển khai các tính năng."),
+        ("Thiết lập cấu trúc và môi trường chạy", "Chuẩn bị cấu trúc code, dependency và cách chạy local theo thiết kế."),
+        ("Cấu hình công cụ kiểm tra", "Thiết lập format, lint, typecheck và test phù hợp; ghi lý do nếu không cần."),
+        ("Thiết lập các phần dùng chung", "Chuẩn bị các thành phần và cấu hình chung được thiết kế yêu cầu."),
+        ("Kiểm chứng dự án nền", "Chạy kiểm tra thực tế trước khi cho phép phát triển tính năng."),
+    ],
     "setup": [
         ("Đọc nhu cầu tích hợp", "Xác định dịch vụ, mục đích và tính năng phụ thuộc theo thiết kế."),
         ("Kiểm tra tài khoản và quyền", "Xác định tài khoản được phép dùng và những thông tin cần bạn cấp."),
@@ -91,6 +100,8 @@ def work_steps(stage):
     return [{"id": "S" + str(i + 1), "title": title, "description": description}
             for i, (title, description) in enumerate(WORK_STEPS[stage])]
 CRITERIA = {
+    "project_setup": ["Cấu trúc, môi trường, coding rules và phần dùng chung đáp ứng thiết kế.",
+                      "Công cụ và kiểm tra dự án nền chạy thành công; có hướng dẫn dùng local."],
     "setup": ["Dịch vụ, tài khoản và phạm vi được phép cấu hình đã rõ",
               "Cấu hình có kiểm tra kết nối thực tế thành công"],
     "analysis": ["Người dùng, vấn đề, kết quả mong muốn và phạm vi rõ ràng",
@@ -112,12 +123,13 @@ CRITERIA = {
 
 def defaults(model=None, effort=None):
     return {
-        "version": 1, "workflow_version": "0.2.0", "mode": "live",
+        "version": 1, "workflow_version": "0.3.0", "mode": "live",
+        "bootstrap_required": True, "project_setup_required": True,
         "service_setup_required": True, "delivery_mode": "local", "release_deferred": True,
         "models": {stage: {
             "model": model or ("gpt-6-astra" if stage in {"analysis", "design", "architecture"} else "gpt-6.1-sol"),
             "effort": effort or ("high" if stage == "review" else "medium"),
-        } for stage in STAGES + ["review"]},
+        } for stage in STAGES + ["review", "project_setup"]},
         "gates": ["handoff"],
         "max_attempts": 2, "turn_timeout_seconds": 900,
         "max_turn_tokens": 400000, "max_cycle_tokens": 2000000,
@@ -215,6 +227,7 @@ def validate_plan(value, requirement_ids):
         require(isinstance(task.get("criteria"), list) and task["criteria"] and
                 all(isinstance(x, str) and x.strip() for x in task["criteria"]), "Công việc cần tiêu chí hoàn tất.")
         require(isinstance(task.get("requirements"), list) and task["requirements"] and
+                all(isinstance(rid, str) for rid in task["requirements"]) and
                 set(task["requirements"]) <= requirement_ids, "Công việc tham chiếu yêu cầu không hợp lệ.")
         require(isinstance(task.get("depends_on"), list) and
                 all(isinstance(x, str) for x in task["depends_on"]), "Phụ thuộc chưa hợp lệ.")
@@ -249,6 +262,26 @@ def validate_services(value):
         validate_commands(service.get("checks", []))
         require(service.get("checks"), "Dịch vụ cần lệnh kiểm tra kết nối hoặc quyền thực tế.")
     return services
+
+
+def validate_project_setup(value):
+    stack = value.get("stack")
+    require(isinstance(stack, dict), "Thiết kế cần stack cho dự án nền.")
+    for field in ["language", "runtime", "framework", "package_manager"]:
+        require(isinstance(stack.get(field), str) and stack[field].strip(), "Stack cần mô tả " + field)
+    for field in ["structure", "coding_rules", "common_components", "environment_names"]:
+        require(isinstance(value.get(field), list) and all(isinstance(item, str) and item.strip() for item in value[field]),
+                "Thiết lập dự án cần danh sách " + field)
+    require(value["structure"] and value["coding_rules"], "Thiết kế cần cấu trúc code và coding rules cụ thể.")
+    tooling = value.get("tooling")
+    require(isinstance(tooling, dict), "Thiết kế cần công cụ kiểm tra của dự án.")
+    for field in ["format", "lint", "typecheck", "test"]:
+        require(isinstance(tooling.get(field), str) and tooling[field].strip(),
+                "Nêu công cụ hoặc lý do không cần " + field)
+    require(isinstance(value.get("instructions"), str) and value["instructions"].strip(), "Dự án nền cần hướng dẫn triển khai.")
+    validate_commands(value.get("checks"))
+    require(value["checks"], "Dự án nền cần lệnh kiểm tra thực tế.")
+    return value
 
 
 def validate_local_plan(plan, services):

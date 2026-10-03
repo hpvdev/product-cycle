@@ -14,8 +14,8 @@ from .store import fingerprint, now, write_json, runner_lock
 
 def context(store, task):
     # Durable accepted artifacts are the source of truth; brief and relevant dependencies only.
-    deps = set(task["deps"]) | {"analysis", "design", "architecture", "plan", "setup"}
-    if task["stage"] in {"build", "verify", "handoff"}:
+    deps = set(task["deps"]) | {"analysis", "design", "architecture", "plan", "project_setup", "setup"}
+    if task["stage"] in {"verify", "handoff"}:
         deps |= {other["id"] for other in store.tasks() if other["stage"] == "setup"}
     packets = []
     for other in store.tasks():
@@ -28,23 +28,30 @@ def context(store, task):
                                           for item in records if item["kind"] == "artifact"]})
     return {"brief_path": str(store.root / "brief.md"), "task": task,
             "accepted_inputs": packets, "policy": store.config,
-            "source_fingerprint": fingerprint(store.project)}
+            "source_fingerprint": fingerprint(store.project),
+            "repository": store.foundation()["repository"],
+            "common_rules_path": str(store.project / "PRODUCT_CYCLE_RULES.md"),
+            "coding_rules_path": str(store.project / "CODING_RULES.md") if (store.project / "CODING_RULES.md").is_file() else None}
 
 
 def prompt_for(store, task, directory, review=False):
-    role = "review" if review else task["stage"]
+    role = "review" if review else task["role"]
     guide = (RESOURCES / "roles" / (role + ".md")).read_text()
     installed_skill = store.project / ".agents" / "skills" / ("product-cycle-" + role) / "SKILL.md"
     if installed_skill.is_file():
         guide = installed_skill.read_text() + "\n\n" + guide
     packet = context(store, task)
     packet["artifact_directory"] = str(directory)
-    packet["required_files"] = FILES.get(task["stage"], [])
+    packet["required_files"] = FILES.get(task["role"], [])
     if store.config.get("service_setup_required") and task["stage"] == "architecture":
         packet["required_files"] = packet["required_files"] + ["services.json"]
+    if store.config.get("project_setup_required") and task["stage"] == "architecture":
+        packet["required_files"] = packet["required_files"] + ["project-setup.json"]
+    if task["role"] == "project_setup":
+        packet["project_setup"] = store.project_setup_contract()
     if task["stage"] == "setup":
         packet["service"] = next(service for service in store.services() if "setup-" + service["id"] == task["id"])
-    packet["work_steps"] = work_steps(task["stage"])
+    packet["work_steps"] = work_steps(task["role"])
     packet["skill"] = {"name": "product-cycle-" + role, "path": str(installed_skill) if installed_skill.is_file() else None}
     if not review:
         aid = task["id"] + ":r" + str(task["revision"]) + ":a" + str(task["attempts"]) + ":work"
@@ -56,9 +63,13 @@ def prompt_for(store, task, directory, review=False):
     if task["stage"] == "retro":
         packet["cycle_history"] = store.snapshot(full_history=True)
     write_json(directory / "context.json", packet)
-    prompt = (RESOURCES / "policy.md").read_text() + "\n\n" + guide + "\n\n" + json.dumps(packet, ensure_ascii=False, indent=2)
+    common = (RESOURCES / "common-rules.md").read_text()
+    project_rules = store.project / "PRODUCT_CYCLE_RULES.md"
+    if project_rules.is_file():
+        common += "\n\n# Project common rules\n" + project_rules.read_text()
+    prompt = (RESOURCES / "policy.md").read_text() + "\n\n" + common + "\n\n" + guide + "\n\n" + json.dumps(packet, ensure_ascii=False, indent=2)
     if not review:
-        prompt += "\nCreate the required files in artifact_directory. Build tasks may also change product code within the project. Return the supplied result schema with project-relative artifact paths. Do not run verification commands from the plan: the controller runs those once after your work. Do not change controller state, policy, databases, evidence objects, or skills."
+        prompt += "\nCreate the required files in artifact_directory. Build and project_setup tasks may also change product code within the project. Return the supplied result schema with project-relative artifact paths. Do not run final checks: the controller runs those once after your work. Do not change controller state, policy, databases, evidence objects, common rules, AGENTS.md, or skills."
         prompt += "\nUse update_plan when available, with exactly the work_steps and step text beginning with the ID followed by a space (for example S1 Read inputs). Update pending/in_progress/completed as work actually progresses. These reports are advisory and do not approve work. Include every work step in result.steps with a concrete summary and project-relative artifact paths drawn from result.artifacts. Do not mark a step completed based only on intended work."
         prompt += "\nWhen feedback is present, address the recorded reviewer findings and operator reason. Previous outputs are repair context, not accepted inputs. Preserve the approved criteria and scope."
     else:
@@ -74,13 +85,18 @@ def run_checks(store, task, aid, directory):
         log = directory / ("check-" + str(index + 1) + ".log")
         started = time.monotonic()
         with log.open("wb") as output:
-            process = subprocess.Popen(command, cwd=store.project, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
             try:
-                code = process.wait(timeout=store.config["turn_timeout_seconds"])
-            except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
+                process = subprocess.Popen(command, cwd=store.project, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+            except OSError:
                 code = -1
+                output.write(b"Could not start the planned check. Verify the executable and local environment.\n")
+            else:
+                try:
+                    code = process.wait(timeout=store.config["turn_timeout_seconds"])
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+                    process.wait()
+                    code = -1
         report = {"argv": command, "exit_code": code, "duration_seconds": round(time.monotonic() - started, 3),
                   "source_fingerprint": fingerprint(store.project), "log_sha256": __import__("hashlib").sha256(log.read_bytes()).hexdigest(),
                   "executed_at": now(), "executor": "controller", "log_path": str(log.relative_to(store.project))}
@@ -122,7 +138,7 @@ def execute(store, tid, client_factory=CodexClient):
 
 def run_phase(store, task, aid, directory, review, client_factory):
     config = store.config
-    role = "review" if review else task["stage"]
+    role = "review" if review else task["role"]
     selected = config["models"][role]
 
     def observe(message):
@@ -166,6 +182,7 @@ def run_phase(store, task, aid, directory, review, client_factory):
 
 
 def review_task(store, tid, client_factory=CodexClient):
+    store.validate_foundation()
     task = store.task(tid)
     require(task["result"] is not None and task["status"] in {"reviewing", "blocked"}, "Công việc chưa có kết quả để review.")
     store.update(tid, status="reviewing")

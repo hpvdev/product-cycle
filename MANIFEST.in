@@ -1,0 +1,2 @@
+recursive-include skills *.md *.yaml
+include build_support.py

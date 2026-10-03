@@ -19,3 +19,5 @@ When invoked on its own, perform only the requested stage in the selected projec
 4. Đối chiếu thay đổi: Xem lại phần code đã sửa, đầu ra và hạn chế trước khi gửi kiểm chứng.
 
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
+
+Before feature work, read CODING_RULES.md and the accepted project_setup output. Keep its stack, shared conventions and tools in effect; report mismatches rather than replacing project foundations inside a feature task.

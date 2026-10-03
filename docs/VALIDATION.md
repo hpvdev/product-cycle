@@ -22,3 +22,12 @@ Chưa áp dụng vào dự án thật, chưa nghiệm thu chất lượng sản 
 - Dashboard minh họa dùng 10 đầu việc và 2 dịch vụ tổng hợp. Kết nối minh họa không phải kết nối Firebase/Resend thật.
 
 Các kết quả này chứng minh cơ chế và hợp đồng của controller, chưa chứng minh chất lượng thiết kế, model/effort tối ưu, computer use hay bàn giao end-to-end của một sản phẩm thật.
+
+## Chuẩn bị project/common và phân cấp UI — 03/10/2026
+
+- 53 kiểm tra controller/protocol/HTTP đã đạt. Sau khi bổ sung kiểm tra phần chuẩn bị thuộc Phát triển và không tính vào số tính năng, 43 kiểm tra workflow được chạy lại và đạt; 10 kiểm tra protocol/HTTP trước đó không đổi.
+- Init chuẩn bị Git, file loại trừ, hướng dẫn chung và skill; giữ Git/hướng dẫn có sẵn, từ chối môi trường bí mật đã được track và thư mục con đã nằm trong repository khác. Không tự commit/push.
+- Chuẩn bị project/common là công việc bên trong Phát triển. Task tính năng chờ kiểm tra/review phần chuẩn bị; thay đổi coding rules đã chốt phải được review lại. Lệnh kiểm tra thiếu executable được lưu như thất bại, không mất bằng chứng.
+- Wheel product_cycle-0.3.0 chứa đủ 12 skill và common rules. Cài vào virtualenv tạm với pip mới, chạy init/status ngoài checkout thành công: Git/common rules/skill sẵn sàng, task chuẩn bị thuộc Phát triển. pip 21.2.4 đi kèm Xcode trên máy này tạo wheel rỗng; README hướng dẫn dùng virtualenv và cập nhật pip. Không đổi Python/pip toàn cục.
+- Dashboard JavaScript qua node --check; HTTP/API trên cổng 8787 trả 9 bước lớn, 10 đầu việc và công việc common trong Phát triển. UI dùng phân cấp bước lớn → công việc → bước nhỏ. Chưa nghiệm thu thị giác bằng trình duyệt.
+- Demo mới giữ tách biệt trạng thái thực tế và minh họa. Chưa gọi AI để xây một sản phẩm, chưa cấu hình Firebase/Resend thật hay kiểm chứng bàn giao toàn bộ. Graphify không được cài mặc định.

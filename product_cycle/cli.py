@@ -9,7 +9,9 @@ from pathlib import Path
 from .contracts import WorkflowError, require
 from .runner import execute, review_task, run_cycle
 from .server import serve
-from .store import Store, fingerprint, now, write_json, runner_lock
+from .store import Store, fingerprint, now, write_json, runner_lock, state_root
+from .bootstrap import prepare_project, repository_state
+from .installer import install_skills
 
 
 def parser():
@@ -22,7 +24,7 @@ def parser():
     init.add_argument("--model", help="Dùng model này cho mọi bước thay cho cấu hình theo vai trò")
     init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"],
                       help="Dùng effort này cho mọi bước thay cho cấu hình theo vai trò")
-    for name in ["status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "serve", "package", "browser-evidence", "judge"]:
+    for name in ["bootstrap", "install-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "serve", "package", "browser-evidence", "judge"]:
         cmd = sub.add_parser(name)
         cmd.add_argument("--project", required=True)
         if name in {"work", "review", "decide", "reopen", "browser-evidence", "judge"}:
@@ -46,22 +48,44 @@ def parser():
         if name == "judge":
             cmd.add_argument("--text", required=True, help="Đoạn nội dung không nhạy cảm được gửi tới Jev")
             cmd.add_argument("--question", required=True)
-    sub.add_parser("doctor", help="Kiểm tra môi trường, không đọc thông tin bí mật")
+    doctor_cli = sub.add_parser("doctor", help="Kiểm tra môi trường, không đọc thông tin bí mật")
+    doctor_cli.add_argument("--project", help="Kiểm tra nền tảng của dự án đã chọn")
     demo = sub.add_parser("demo", help="Tạo dữ liệu minh họa, không gọi model")
     demo.add_argument("--project", required=True)
     sub.add_parser("eval", help="Chạy bộ đánh giá quy trình cục bộ")
     return cli
 
 
-def doctor():
+def doctor(project=None):
     codex = os.environ.get("PRODUCT_CYCLE_CODEX") or shutil.which("codex")
     result = {"python": sys.version.split()[0], "platform": sys.platform, "codex": codex,
               "git": shutil.which("git"), "jev": shutil.which("jev"),
               "browser": "Kiểm tra trong phiên Codex được chọn; không suy ra từ ứng dụng desktop."}
+    result["codex_authenticated"] = False
     if codex:
-        check = subprocess.run([codex, "login", "status"], capture_output=True, text=True, timeout=15)
-        result["codex_authenticated"] = check.returncode == 0
+        try:
+            check = subprocess.run([codex, "login", "status"], capture_output=True, text=True, timeout=15)
+            result["codex_authenticated"] = check.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            result["codex_status"] = "Chưa kiểm tra được đăng nhập Codex."
+    result["ready"] = bool(result["git"] and result["codex_authenticated"])
+    result["model_access"] = "Quyền dùng model và công cụ cần xác nhận ở phiên thực thi; không suy ra từ đăng nhập."
+    if project:
+        project = Path(project).expanduser().resolve()
+        require(project.is_dir(), "Chưa có thư mục dự án được chọn.")
+        if (state_root(project) / "state.sqlite3").is_file():
+            store = Store(project)
+            try:
+                result["foundation"] = store.foundation()
+            finally:
+                store.close()
+            result["ready"] = result["ready"] and result["foundation"]["status"] == "done"
+        else:
+            result["repository"] = repository_state(project) if result["git"] else None
+            result["ready"] = False
+            result["project_status"] = "Dự án chưa được khởi tạo bằng Product Cycle."
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    return result
 
 
 def main(argv=None):
@@ -69,7 +93,21 @@ def main(argv=None):
     store = None
     try:
         if args.command == "doctor":
-            return doctor()
+            result = doctor(args.project)
+            require(result["ready"], "Môi trường chưa sẵn sàng; xử lý các mục chưa đạt trong kết quả kiểm tra.")
+            return
+        if args.command == "install-skills":
+            print(json.dumps(install_skills(args.project), ensure_ascii=False, indent=2))
+            return
+        if args.command == "bootstrap":
+            if (state_root(args.project) / "state.sqlite3").is_file():
+                store = Store(args.project)
+                with runner_lock(store):
+                    report = store.bootstrap()
+            else:
+                report = prepare_project(args.project)
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return
         if args.command == "eval":
             from .evals import evaluate
             result = evaluate()

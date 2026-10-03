@@ -22,3 +22,5 @@ When invoked on its own, perform only the requested stage in the selected projec
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
 
 New local cycles use policy.service_setup_required: architecture identifies necessary services and user inputs without configuring them; plan links each increment to its required services and defines local delivery; handoff presents the verified local product. Configuration tasks run after design and plan review. VPS and external release are deferred. Respect configured owner gates.
+
+For cycles with project_setup_required, produce project-setup.json describing the selected stack, structure, coding rules, tooling, common components, environment names and actual foundation checks. The controller creates a preparatory task inside Development, before feature tasks.

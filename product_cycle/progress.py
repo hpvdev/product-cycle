@@ -17,7 +17,7 @@ def task_progress(task, tasks, config, events, decisions, root):
     result_steps = {step["id"]: step for step in (task.get("result") or {}).get("steps", [])}
     review_steps = {step["id"]: step for step in (task.get("review") or {}).get("steps", [])}
     steps = []
-    for definition in work_steps(task["stage"]):
+    for definition in work_steps(task["role"]):
         step = dict(definition, status=base, source="controller", note="", evidence=[], updated_at=None)
         for event in events:
             if event["type"] == "step.progress" and event["data"].get("step") == step["id"]:
@@ -46,7 +46,7 @@ def task_progress(task, tasks, config, events, decisions, root):
     add("outputs", "Kiểm tra đầu ra", "Đối chiếu cấu trúc, file bắt buộc và liên kết bằng chứng.",
         "done" if task.get("result") else "blocked" if work and work["status"] == "failed" else base,
         refs=artifact_refs)
-    commands = task["checks"] if task["stage"] in {"build", "setup"} else config.get("verification_commands", []) if task["stage"] == "verify" else []
+    commands = task["checks"] if task["stage"] in {"build", "setup", "project_setup"} else config.get("verification_commands", []) if task["stage"] == "verify" else []
     for index, command in enumerate(commands):
         reports = []
         for item in evidence:
@@ -133,7 +133,7 @@ def development_progress(tasks, plan, cycle_state):
     plan_task = by_id["plan"]
     approved = plan_task["status"] == "done"
     proposal = plan is not None and not approved
-    items = plan["tasks"] if plan is not None else [task for task in tasks if task["stage"] == "build" and task["status"] != "superseded"]
+    items = plan["tasks"] if plan is not None else [task for task in tasks if task["stage"] == "build" and task["id"] != "project_setup" and task["status"] != "superseded"]
     rows = []
     for item in items:
         task = by_id.get(item["id"]) if not proposal else None

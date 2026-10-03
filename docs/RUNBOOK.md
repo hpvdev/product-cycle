@@ -6,13 +6,13 @@
 
 Brief cần: người dùng, vấn đề, kết quả, phạm vi, ràng buộc, những gì chưa biết. Dùng `init` cho project được chọn; `serve` mở dashboard; `run` bắt đầu công việc sẵn sàng. Kiểm tra trước rằng project và PRODUCT_CYCLE_HOME là vị trí mong muốn.
 
-Skill cài theo project: `python3 scripts/install_skill.py --project /absolute/product`. Script cài 1 skill điều phối và 10 skill chuyên môn (9 giai đoạn cùng review độc lập) vào `.agents/skills/`. Nó kiểm tra xung đột trước khi sao chép, không ghi đè skill có sẵn và không sửa thiết lập Codex toàn cục. Bộ controller vẫn chạy từ repository hoặc executable đã cài.
+Skill cài theo project: `python3 scripts/install_skill.py --project /absolute/product`. Script cài 1 skill điều phối và 11 skill chuyên môn (9 bước lớn, một skill chuẩn bị code và review độc lập) vào `.agents/skills/`. Nó kiểm tra xung đột trước khi sao chép, không ghi đè skill có sẵn và không sửa thiết lập Codex toàn cục. Bộ controller vẫn chạy từ repository hoặc executable đã cài.
 
-Một project mới dùng `init --project /absolute/product --brief /absolute/brief.md --name "Tên sản phẩm"`, sau đó `serve --project /absolute/product` để xem dashboard và `run --project /absolute/product` từ terminal khác để thực thi. Cài skill trước init để bộ skill được tính trong phiên bản source ngay từ đầu. Mỗi project có kho trạng thái riêng ngoài thư mục worker được ghi.
+Một project mới dùng `init --project /absolute/product --brief /absolute/brief.md --name "Tên sản phẩm"`, sau đó `serve --project /absolute/product` để xem dashboard và `run --project /absolute/product` từ terminal khác để thực thi. `init` tự chuẩn bị Git, file loại trừ, hướng dẫn chung và bộ skill trước khi bắt đầu phân tích. Không tự commit/push hoặc đổi Git có sẵn. Mỗi project có kho trạng thái riêng ngoài thư mục worker được ghi.
 
 ## Các bước nhỏ và mốc thiết kế
 
-Dự án mới hiển thị 9 giai đoạn, bao gồm cấu hình dịch vụ; các dự án cũ giữ cấu hình giai đoạn phù hợp. Dashboard hiển thị danh sách đầu việc trong plan ngay khi có đầu ra dự kiến, cùng, các bước nhỏ, kiểm tra theo kế hoạch, review và điểm quyết định. Trước khi plan được chấp nhận, phần phát triển hiển thị các bước dự kiến; sau đó mỗi công việc có tiến độ riêng. Tiến độ là tỷ lệ bước được xác nhận, không phải ước lượng thời gian. Số bước có thể tăng khi công việc hoặc lệnh kiểm tra được mở rộng.
+Dự án mới hiển thị 9 bước lớn; chuẩn bị project/common là công việc bên trong Phát triển, cấu hình dịch vụ có nhóm riêng; các dự án cũ giữ cấu hình giai đoạn phù hợp. Dashboard hiển thị danh sách đầu việc trong plan ngay khi có đầu ra dự kiến, cùng các bước nhỏ, kiểm tra theo kế hoạch, review và điểm quyết định. Trước khi plan được chấp nhận, phần phát triển hiển thị các bước dự kiến; sau đó mỗi công việc có tiến độ riêng. Tiến độ là tỷ lệ bước được xác nhận, không phải ước lượng thời gian. Số bước có thể tăng khi công việc hoặc lệnh kiểm tra được mở rộng.
 
 Worker dùng `update_plan` khi công cụ sẵn có và giữ mã S1, S2... trong tên bước để truyền tiến độ trực tiếp. Báo completed chỉ hiển thị “Chờ kiểm chứng”. Mỗi bước cần đầu ra liên kết trong work result; reviewer đánh giá riêng bằng bằng chứng. Nếu runtime không gửi cập nhật kế hoạch, các bước chưa có báo cáo giữ trạng thái chờ cho đến khi kết quả về, không tự suy diễn bước đang chạy. Controller xác nhận kiểm tra và quyết định theo dữ liệu thực tế. Phiên cũ không có dữ liệu từng bước hiển thị “Chưa ghi chi tiết”; mở lại tạo revision mới và giữ nguyên lịch sử.
 
@@ -27,7 +27,7 @@ Mặc định cho dự án mới:
 | Vai trò | Model | Effort |
 |---|---|---|
 | Phân tích, UX/UI, kiến trúc | `gpt-6-astra` | `medium` |
-| Kế hoạch, cấu hình dịch vụ, phát triển, nghiệm thu, bàn giao, retro | `gpt-6.1-sol` | `medium` |
+| Kế hoạch, thiết lập dự án, cấu hình dịch vụ, phát triển, nghiệm thu, bàn giao, retro | `gpt-6.1-sol` | `medium` |
 | Review độc lập | `gpt-6.1-sol` | `high` |
 
 Đây là cấu hình khởi đầu của Product Cycle dựa trên hướng dẫn chọn model của OpenAI, chưa phải kết quả tối ưu đã được kiểm chứng trên dự án thật. Các dự án đã khởi tạo giữ cấu hình riêng; thay đổi mặc định không viết lại lịch sử phiên. `init --model ...` ghi đè model cho mọi vai trò; `--effort ...` ghi đè effort cho mọi vai trò. Hai tùy chọn độc lập, phần không ghi đè vẫn dùng mặc định theo vai trò.
@@ -82,3 +82,13 @@ services.json được tạo ở bước kỹ thuật sau phân tích và UX/UI.
 Dashboard chỉ hiển thị tên/tham chiếu đầu vào, quyền và trạng thái. Cấp bí mật qua nơi lưu bảo mật hoặc cấu hình môi trường của project, không qua ghi chú dashboard. Khi worker thiếu công cụ/quyền hoặc thông tin, readiness.json vẫn được niêm phong để hiện yêu cầu cần cấp. Sau khi cung cấp, mở lại đúng việc cấu hình để chạy và kiểm tra lại. Các đầu việc không phụ thuộc vẫn có thể tiếp tục.
 
 Đăng nhập sẵn trong Chrome không tự cấp computer use cho app-server. Xác nhận công cụ và profile đúng trong phiên thực thi; không dùng hungpv@hblab.vn / HungPV hoặc profile chưa xác định. Chưa có adapter tự động browser/mobile nghiệm thu; giữ trạng thái chưa kiểm chứng nếu thiếu quan sát thực tế. VPS, deploy web và DeployGate được để sau; không mua hoặc cấu hình hạ tầng phát hành trong cycle local.
+
+## Repository, coding rules và phần dùng chung
+
+`init` chuẩn bị một repository độc lập. Repo đã có giữ nguyên nhánh, remote, danh tính, lịch sử và công việc chưa commit. Thư mục chứa code đang được repo cha theo dõi phải chọn repo gốc để tránh tạo nested repo sai. File .env đang được Git theo dõi khiến bootstrap dừng; người vận hành xử lý index, không xóa file local.
+
+`AGENTS.md` trỏ tới `PRODUCT_CYCLE_RULES.md`. Hướng dẫn đã có và skill tùy chỉnh được giữ nguyên. Controller ghi hash hướng dẫn/skill và kiểm tra trước phiên; thay đổi chưa được ghi nhận sẽ chặn chạy. `bootstrap --project ...` ghi nhận thay đổi sau khi đã kiểm tra, khi không có phiên đang chạy. Dashboard hiển thị trạng thái chuẩn bị và Git thực tế; mỗi phiên lưu quan sát repository.
+
+Thiết kế kỹ thuật tạo project-setup.json: stack, cấu trúc, coding rules, công cụ format/lint/typecheck/test (hoặc lý do không cần), common_components, environment_names, instructions và checks. Sau plan, công việc chuẩn bị project/common bên trong Phát triển tạo CODING_RULES.md, runtime, dependency, script, phần dùng chung và mẫu môi trường theo thiết kế. Chỉ cho task chức năng và cấu hình dịch vụ chạy sau checks/review thành công. Coding rules không được sửa âm thầm trong task chức năng; mở lại bước thiết lập để review thay đổi.
+
+Không ép một stack hoặc cài sẵn mọi hạ tầng cho mọi sản phẩm. Graphify chỉ cân nhắc khi code hiện có đủ phức tạp để cần bản đồ quan hệ, sau khi architecture ghi lý do; không phải bước bắt buộc.

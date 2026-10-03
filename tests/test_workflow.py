@@ -11,6 +11,7 @@ from product_cycle.evals import evaluate
 from product_cycle.fixtures import complete_fixture, prepare_plan
 from product_cycle.runner import execute, prompt_for, run_checks, run_cycle
 from product_cycle.store import Store, fingerprint, digest, runner_lock, write_json
+from product_cycle.bootstrap import prepare_project, repository_state, git
 
 
 class WorkflowTests(unittest.TestCase):
@@ -419,6 +420,143 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(next(stage for stage in store.snapshot()["stages"] if stage["id"] == "setup")["status"], "not_required")
         finally:
             store.close()
+
+    def test_live_init_prepares_repository_without_committing_or_publishing(self):
+        store = Store.create(self.base / "prepared", "Local product", "Prepared product")
+        try:
+            foundation = store.foundation()
+            self.assertEqual(foundation["status"], "done")
+            self.assertEqual(foundation["repository"]["branch"], "main")
+            self.assertIsNone(foundation["repository"]["head"])
+            self.assertEqual(git(store.project, "remote").stdout, "")
+            self.assertEqual(len(list((store.project / ".agents/skills").glob("*/SKILL.md"))), 12)
+            for path in [".env", ".env.production", ".product-cycle/private.json"]:
+                self.assertEqual(git(store.project, "check-ignore", "--no-index", path).returncode, 0)
+            self.assertEqual(git(store.project, "check-ignore", "--no-index", ".env.example").returncode, 1)
+            aid, directory = store.begin("analysis", "work")
+            prompt = prompt_for(store, store.task("analysis"), directory)
+            self.assertIn("Common development rules", prompt)
+            events = store.snapshot()["events"]
+            self.assertTrue(any(event["type"] == "repository.observed" and event["data"]["attempt_id"] == aid for event in events))
+        finally:
+            store.close()
+
+    def test_preparation_preserves_existing_repository_and_rules(self):
+        project = self.base / "existing"
+        project.mkdir()
+        git(project, "init", "--initial-branch=existing-branch")
+        git(project, "remote", "add", "origin", "https://example.com/existing.git")
+        git(project, "config", "user.name", "Existing owner")
+        (project / "work.txt").write_text("Uncommitted user work")
+        (project / "AGENTS.md").write_text("Existing instructions\n")
+        (project / "PRODUCT_CYCLE_RULES.md").write_text("Custom common rules\n")
+        first = prepare_project(project)
+        original = (project / "AGENTS.md").read_text()
+        second = prepare_project(project)
+        self.assertFalse(first["git_initialized"])
+        self.assertEqual(repository_state(project)["branch"], "existing-branch")
+        self.assertEqual(git(project, "remote", "get-url", "origin").stdout.strip(), "https://example.com/existing.git")
+        self.assertEqual(git(project, "config", "user.name").stdout.strip(), "Existing owner")
+        self.assertEqual((project / "work.txt").read_text(), "Uncommitted user work")
+        self.assertTrue(original.startswith("Existing instructions\n"))
+        self.assertEqual((project / "AGENTS.md").read_text(), original)
+        self.assertEqual((project / "PRODUCT_CYCLE_RULES.md").read_text(), "Custom common rules\n")
+        self.assertFalse(second["changes"])
+        self.assertFalse(second["skills"]["installed"])
+
+    def test_preparation_rejects_tracked_subproject_and_private_environment(self):
+        project = self.base / "parent"
+        child = project / "child"
+        child.mkdir(parents=True)
+        git(project, "init", "--initial-branch=main")
+        (child / "source.py").write_text("print('fixture')")
+        git(project, "add", "child/source.py")
+        with self.assertRaises(WorkflowError):
+            prepare_project(child)
+        self.assertFalse((child / ".git").exists())
+        (project / ".env").write_text("FIXTURE=synthetic\n")
+        git(project, "add", ".env")
+        with self.assertRaises(WorkflowError):
+            prepare_project(project)
+        self.assertEqual((project / ".env").read_text(), "FIXTURE=synthetic\n")
+
+    def test_changed_common_rules_block_work_before_an_attempt_starts(self):
+        store = Store.create(self.base / "protected", "Local product", "Protected product")
+        try:
+            rules = store.project / "PRODUCT_CYCLE_RULES.md"
+            original = rules.read_text()
+            rules.write_text("Changed rules without adoption")
+            self.assertEqual(store.foundation()["status"], "blocked")
+            with self.assertRaises(WorkflowError):
+                store.begin("analysis", "work")
+            self.assertEqual(store.task("analysis")["attempts"], 0)
+            rules.write_text(original)
+            self.assertEqual(store.foundation()["status"], "done")
+        finally:
+            store.close()
+
+    def test_features_require_checked_project_setup_and_stable_coding_rules(self):
+        store = Store.create(self.base / "foundation", "Local product", "Project foundation")
+        try:
+            prepare_plan(store)
+            self.assertEqual(store.next_task()["id"], "project_setup")
+            self.assertIn("project_setup", store.task("T1")["deps"])
+            self.assertEqual(store.task("project_setup")["stage"], "build")
+            self.assertEqual(store.task("project_setup")["role"], "project_setup")
+            self.assertNotIn("project_setup", [stage["id"] for stage in store.snapshot()["stages"]])
+            self.assertEqual(store.snapshot()["development"]["total"], 1)
+            with self.assertRaises(WorkflowError):
+                store.begin("T1", "work")
+            complete_fixture(store, "project_setup")
+            self.assertEqual(store.task("project_setup")["status"], "done")
+            self.assertTrue(any(item["kind"] == "check" for item in store.current_evidence("project_setup")))
+            self.assertEqual(store.next_task()["id"], "T1")
+            (store.project / "CODING_RULES.md").write_text("Unreviewed convention change")
+            with self.assertRaises(WorkflowError):
+                store.begin("T1", "work")
+        finally:
+            store.close()
+
+    def test_failed_project_setup_check_keeps_features_waiting(self):
+        store = Store.create(self.base / "failed-foundation", "Local product", "Failed foundation")
+        try:
+            prepare_plan(store)
+            with store.db:
+                store.db.execute("UPDATE tasks SET checks=? WHERE id='project_setup'",
+                                 (json.dumps([[sys.executable, "-c", "raise SystemExit(7)"]]),))
+            with self.assertRaises(WorkflowError):
+                complete_fixture(store, "project_setup")
+            self.assertNotEqual(store.task("project_setup")["status"], "done")
+            self.assertEqual(store.snapshot()["development"]["items"][0]["status"], "waiting")
+            with self.assertRaises(WorkflowError):
+                store.begin("T1", "work")
+        finally:
+            store.close()
+
+    def test_missing_check_executable_is_recorded_as_failure(self):
+        prepare_plan(self.store, self.plan([str(self.base / "missing-executable")]))
+        with self.assertRaises(WorkflowError):
+            complete_fixture(self.store, "T1")
+        checks = [item for item in self.store.current_evidence("T1") if item["kind"] == "check"]
+        self.assertEqual(len(checks), 1)
+        report = json.loads((self.store.root / checks[0]["object_path"]).read_text())
+        self.assertEqual(report["exit_code"], -1)
+        self.assertNotEqual(self.store.task("T1")["status"], "done")
+
+    def test_failed_accept_does_not_prematurely_mark_work_done(self):
+        config = self.store.config
+        config["gates"] = []
+        write_json(self.store.root / "config.json", config)
+        with patch.object(self.store, "accept", side_effect=WorkflowError("Changed output")):
+            with self.assertRaises(WorkflowError):
+                complete_fixture(self.store, "analysis")
+        self.assertNotEqual(self.store.task("analysis")["status"], "done")
+
+    def test_malformed_requirement_links_are_rejected_as_workflow_errors(self):
+        plan = self.plan()
+        plan["tasks"][0]["requirements"] = [{"id": "R1"}]
+        with self.assertRaises(WorkflowError):
+            validate_plan(plan, {"R1"})
 
 
 if __name__ == "__main__":

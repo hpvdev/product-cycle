@@ -1,6 +1,6 @@
 # Product Cycle
 
-Bộ quy trình phát triển sản phẩm bằng Codex: **phân tích → UX/UI → kỹ thuật → kế hoạch → cấu hình dịch vụ cần thiết → phát triển → nghiệm thu → bàn giao → retro**. Có trạng thái, model/effort, review độc lập, bằng chứng và dashboard.
+Bộ quy trình phát triển sản phẩm bằng Codex: **chuẩn bị repository → phân tích → UX/UI → kỹ thuật → kế hoạch → cấu hình dịch vụ cần thiết → phát triển (chuẩn bị project/common, rồi tính năng) → nghiệm thu → bàn giao → retro**. Có trạng thái, model/effort, review độc lập, bằng chứng và dashboard.
 
 Gói độc lập dựa trên [tài liệu OpenAI](docs/SOURCES.md). Không dùng Symphony. Phiên bản đầu chạy tuần tự và giữ lịch sử; áp dụng được cho repository mới hoặc đang có.
 
@@ -17,7 +17,15 @@ Mở [dashboard](http://127.0.0.1:8787). Demo ghi rõ dữ liệu tổng hợp, 
 
 ## Áp dụng sau khi chọn dự án
 
-Python 3.9+, Git, Codex đã đăng nhập; macOS/Linux. Jev tùy chọn. Chạy từ repo không cần dependency. Có thể `python3 -m pip install -e .` để dùng lệnh `product-cycle`.
+Python 3.9+, Git, Codex đã đăng nhập; macOS/Linux. Jev tùy chọn. Chạy từ repo không cần dependency. Để cài executable và bộ skill đóng gói, dùng môi trường Python riêng với pip mới:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install .
+```
+
+Sau đó dùng `.venv/bin/product-cycle`.
 
 ```sh
 python3 -m product_cycle init --project /absolute/product --brief /absolute/brief.md --name "Tên sản phẩm"
@@ -32,7 +40,17 @@ python3 -m product_cycle decide --project /absolute/product --task handoff --act
 python3 -m product_cycle run --project /absolute/product
 ```
 
-Khi áp dụng, thêm `.product-cycle/` vào `.gitignore` sản phẩm. State và bằng chứng đã chốt nằm ở `~/.local/share/product-cycle`, ngoài vùng AI được ghi. `PRODUCT_CYCLE_HOME` đổi nơi lưu; giữ nguyên trong một cycle. `PRODUCT_CYCLE_CODEX` chọn binary nếu Codex không nằm trong PATH.
+`init` tự chuẩn bị Git nếu chưa có, bổ sung `.gitignore`, tạo `AGENTS.md`/`PRODUCT_CYCLE_RULES.md` và cài 12 skill theo project. Giữ nguyên Git, hướng dẫn và skill đã có; không tự commit/push. Thiết kế kỹ thuật tạo `project-setup.json`; công việc chuẩn bị bên trong Phát triển tạo coding rules theo stack, cấu trúc code, môi trường, công cụ kiểm tra và phần dùng chung trước mọi task chức năng. State và bằng chứng đã chốt nằm ở `~/.local/share/product-cycle`, ngoài vùng AI được ghi. `PRODUCT_CYCLE_HOME` đổi nơi lưu; giữ nguyên trong một cycle. `PRODUCT_CYCLE_CODEX` chọn binary nếu Codex không nằm trong PATH.
+
+## Chuẩn bị và kiểm tra nền tảng
+
+```sh
+python3 -m product_cycle doctor --project /absolute/product
+python3 -m product_cycle bootstrap --project /absolute/product
+python3 -m product_cycle install-skills --project /absolute/product
+```
+
+`bootstrap` bổ sung nền tảng cho cycle cũ khi không có phiên chạy; nếu source đã nghiệm thu thay đổi, bước verify và phần phụ thuộc cần thực hiện lại. Nó không tự thêm công việc chuẩn bị theo stack vào cycle cũ. Dùng cycle mới để áp dụng trọn hợp đồng v0.3. `install-skills` cài riêng và từ chối ghi đè. Các lệnh có trong wheel, dùng được ngoài checkout sau khi cài bằng pip. Graphify là tùy chọn khi repo đã có quan hệ code phức tạp; không cài mặc định cho project mới nhỏ.
 
 ## Kiểm chứng
 
@@ -55,6 +73,6 @@ Hai lệnh đầu dùng tình huống tổng hợp/adapter giả lập, không g
 
 ## Giới hạn
 
-V0.2 chạy tuần tự; không tự merge/deploy/thông báo bên ngoài/theo dõi production. Không tự mở browser để nghiệm thu, đổi model khi thất bại hoặc áp dụng đề xuất retro. Lệnh kiểm tra chạy cục bộ ngoài sandbox Codex, nên cần lệnh tin cậy thuộc phạm vi đã cấp phép và được review. Chất lượng sản phẩm được kiểm chứng khi áp dụng dự án thật.
+V0.3 chạy tuần tự; không tự merge/deploy/thông báo bên ngoài/theo dõi production. Không tự mở browser để nghiệm thu, đổi model khi thất bại hoặc áp dụng đề xuất retro. Lệnh kiểm tra chạy cục bộ ngoài sandbox Codex, nên cần lệnh tin cậy thuộc phạm vi đã cấp phép và được review. Chất lượng sản phẩm được kiểm chứng khi áp dụng dự án thật.
 
 Đọc [quy trình](docs/WORKFLOW.md), [kiến trúc](docs/ARCHITECTURE.md), [vận hành](docs/RUNBOOK.md), [đánh giá](evals/README.md).

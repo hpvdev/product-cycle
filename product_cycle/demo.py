@@ -50,12 +50,16 @@ def create_demo(project):
                          "Product Cycle · 10 đầu việc minh họa", mode="demo")
     try:
         config = store.config
-        config.update(service_setup_required=True, gates=["handoff"])
+        config.update(service_setup_required=True, project_setup_required=True, gates=["handoff"])
         write_json(store.root / "config.json", config)
+        store.bootstrap()
+        store.add_task("project_setup", "build", "Chuẩn bị project và phần common", "Thiết lập nền minh họa", ["plan"],
+                       ["Nền minh họa có đầu ra", "Kiểm tra tổng hợp thành công"], [], [])
         for tid in ["analysis", "design"]:
             complete_fixture(store, tid)
         complete_fixture(store, "architecture", services=demo_services())
         complete_fixture(store, "plan", plan=demo_plan())
+        complete_fixture(store, "project_setup")
         complete_fixture(store, "setup-firebase")
         complete_fixture(store, "setup-resend", readiness={"services": [{"id": "resend", "status": "needs_input",
                          "note": "Cần bạn chọn domain gửi email và cấp tham chiếu khóa truy cập. Đây là tình huống minh họa.",

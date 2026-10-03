@@ -1,18 +1,21 @@
 """Explicitly synthetic fixtures for controller evaluation and dashboard demos."""
 
 import json
+import sys
 
 from .contracts import FILES, work_steps
 from .store import write_json, fingerprint
 
 
-def complete_fixture(store, tid, approve=True, plan=None, review_decision="approve", services=None, readiness=None, blocker=None):
+def complete_fixture(store, tid, approve=True, plan=None, review_decision="approve", services=None, readiness=None, blocker=None, project_setup=None):
     task = store.task(tid)
     aid, directory = store.begin(tid, "work")
     artifacts = []
-    filenames = FILES.get(task["stage"], ["increment.md"])
+    filenames = FILES.get(task["role"], ["increment.md"])
     if task["stage"] == "architecture" and store.config.get("service_setup_required"):
         filenames = filenames + ["services.json"]
+    if task["stage"] == "architecture" and store.config.get("project_setup_required"):
+        filenames = filenames + ["project-setup.json"]
     for filename in filenames:
         path = directory / filename
         if filename == "requirements.json":
@@ -26,6 +29,14 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
             write_json(path, value)
         elif filename == "services.json":
             write_json(path, {"services": services or []})
+        elif filename == "project-setup.json":
+            write_json(path, project_setup or {
+                "stack": {"language": "Python", "runtime": "Python 3.9+", "framework": "Thư viện chuẩn", "package_manager": "Không cần dependency cho fixture"},
+                "structure": ["src/ cho code minh họa"], "coding_rules": ["Quy tắc tổng hợp, chưa phải app thật"],
+                "common_components": [], "environment_names": [],
+                "tooling": {"format": "Không áp dụng trong fixture", "lint": "Không áp dụng trong fixture", "typecheck": "Không áp dụng trong fixture", "test": "Lệnh tổng hợp kiểm tra cơ chế"},
+                "instructions": "Thiết lập nền minh họa; không tuyên bố có sản phẩm thật.",
+                "checks": [[sys.executable, "-c", "print('synthetic project setup check; not a real product')"]]})
         elif filename == "readiness.json":
             service = next(service for service in store.services() if "setup-" + service["id"] == tid)
             write_json(path, readiness or {"services": [{"id": service["id"], "status": "ready",
@@ -42,9 +53,18 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
             path.write_text("# Dữ liệu minh họa\n\nĐây là đầu ra tổng hợp để kiểm tra bộ điều phối, không phải công việc của AI.\n")
         artifacts.append({"path": str(path.relative_to(store.project)), "purpose": "Đầu ra minh họa: " + filename,
                           "criteria": ["C" + str(i + 1) for i in range(len(task["criteria"]))], "requirements": task["requirements"]})
+    if task["role"] == "project_setup":
+        setup = store.project_setup_contract()
+        path = store.project / "CODING_RULES.md"
+        path.write_text("# Quy tắc minh họa\n\n" + "\n".join(setup["coding_rules"]) + "\n")
+        artifacts.append({"path": "CODING_RULES.md", "purpose": "Quy tắc tổng hợp", "criteria": ["C1", "C2"], "requirements": []})
+        if setup["environment_names"]:
+            path = store.project / ".env.example"
+            path.write_text("".join(name + "=\n" for name in setup["environment_names"]))
+            artifacts.append({"path": ".env.example", "purpose": "Mẫu môi trường tổng hợp", "criteria": ["C1", "C2"], "requirements": []})
     result = {"summary": "Kết quả minh họa cho " + task["title"], "artifacts": artifacts,
               "steps": [{"id": step["id"], "summary": "Kết quả tổng hợp: " + step["title"],
-                         "artifacts": [item["path"] for item in artifacts]} for step in work_steps(task["stage"])],
+                         "artifacts": [item["path"] for item in artifacts]} for step in work_steps(task["role"])],
               "limitations": ["Dữ liệu tổng hợp, chưa có đánh giá AI."], "blocker": blocker}
     write_json(directory / "result.json", result)
     store.work_finished(tid, aid, result)

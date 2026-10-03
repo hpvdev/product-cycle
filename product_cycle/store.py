@@ -13,7 +13,8 @@ from pathlib import Path
 
 from .contracts import (CRITERIA, FILES, STAGE_TITLES, WorkflowError, defaults,
                         json_object, require, validate_plan, validate_requirements, work_steps,
-                        validate_services, validate_local_plan)
+                        validate_services, validate_local_plan, validate_project_setup)
+from .bootstrap import prepare_project, foundation_status, repository_state
 
 
 def now():
@@ -89,6 +90,7 @@ class Store:
         require(not root.is_relative_to(project), "PRODUCT_CYCLE_HOME phải nằm ngoài dự án.")
         require(not root.exists(), "Dự án đã có một quy trình; dùng status để kiểm tra.")
         require(brief.strip(), "Cần mô tả mục tiêu sản phẩm.")
+        preparation = prepare_project(project) if mode == "live" else None
         root.mkdir(mode=0o700, parents=True)
         (root / "objects").mkdir()
         (project / ".product-cycle").mkdir(exist_ok=True)
@@ -96,8 +98,12 @@ class Store:
         config = defaults(model, effort)
         config.update({"name": name, "mode": mode, "created_at": now()})
         if mode == "demo":
-            config.update(service_setup_required=False, gates=["analysis", "design", "plan", "handoff"])
+            config.update(service_setup_required=False, project_setup_required=False, bootstrap_required=False,
+                          gates=["analysis", "design", "plan", "handoff"])
         write_json(root / "config.json", config)
+        if preparation:
+            preparation["prepared_at"] = now()
+            write_json(root / "bootstrap.json", preparation)
         with sqlite3.connect(str(root / "state.sqlite3")) as db:
             db.executescript("""
                 CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -137,12 +143,16 @@ class Store:
         store = cls(project)
         previous = []
         stages = ["analysis", "design", "architecture", "plan"]
+        if config["project_setup_required"]:
+            stages += ["project_setup"]
         stages += ["verify", "handoff", "retro"]
         for stage in stages:
-            store.add_task(stage, stage, STAGE_TITLES[stage], "Complete the " + stage + " contract.",
+            store.add_task(stage, "build" if stage == "project_setup" else stage, STAGE_TITLES[stage], "Complete the " + stage + " contract.",
                            previous, CRITERIA[stage], [], [])
             previous = [stage]
         store.event(None, "cycle.created", {"name": name, "mode": mode, "workflow_version": config["workflow_version"]})
+        if preparation:
+            store.event(None, "project.prepared", preparation)
         return store
 
     def close(self):
@@ -151,6 +161,34 @@ class Store:
     @property
     def config(self):
         return json_object(self.root / "config.json")
+
+    def foundation(self):
+        path = self.root / "bootstrap.json"
+        return foundation_status(self.project, json_object(path) if path.is_file() else None)
+
+    def validate_foundation(self):
+        if self.config.get("bootstrap_required"):
+            require(self.foundation()["status"] == "done",
+                    "Chuẩn bị dự án chưa đạt. Kiểm tra Git, quy tắc và skill bằng doctor --project rồi ghi nhận lại bằng bootstrap.")
+        if self.config.get("project_setup_required") and self.task("project_setup")["status"] == "done":
+            record = next((item for item in self.current_evidence("project_setup") if item["source"] == "CODING_RULES.md"), None)
+            require(record is not None and digest(self.safe_path("CODING_RULES.md")) == record["sha256"],
+                    "Coding rules đã thay đổi sau khi thiết lập dự án; mở lại bước thiết lập để review thay đổi.")
+
+    def bootstrap(self):
+        require(not any(task["status"] in {"running", "reviewing"} for task in self.tasks()),
+                "Dừng phiên đang chạy trước khi bổ sung nền tảng dự án.")
+        before = fingerprint(self.project)
+        report = prepare_project(self.project)
+        report["prepared_at"] = now()
+        write_json(self.root / "bootstrap.json", report)
+        config = self.config
+        config["bootstrap_required"] = True
+        write_json(self.root / "config.json", config)
+        if before != fingerprint(self.project) and self.task("verify")["attempts"]:
+            self.reopen("verify", "Nền tảng dự án đã thay đổi; cần kiểm chứng lại bản local.")
+        self.event(None, "project.prepared", report)
+        return report
 
     def event(self, task_id, kind, data):
         with self.db:
@@ -166,6 +204,7 @@ class Store:
     @staticmethod
     def decode(row):
         item = dict(row)
+        item["role"] = "project_setup" if item["id"] == "project_setup" else item["stage"]
         for field in ["deps", "criteria", "requirements", "checks", "result", "review"]:
             if item.get(field) is not None:
                 item[field] = json.loads(item[field])
@@ -253,6 +292,7 @@ class Store:
         return None
 
     def begin(self, tid, phase):
+        self.validate_foundation()
         task = self.task(tid)
         feedback = None
         require(phase in {"work", "review"}, "Giai đoạn thực thi không hợp lệ.")
@@ -278,11 +318,13 @@ class Store:
         aid = tid + ":r" + str(task["revision"]) + ":a" + str(number) + ":" + phase
         if phase == "review":
             aid += ":" + str(reviews + 1)
-        model = self.config["models"]["review" if phase == "review" else task["stage"]]
+        model = self.config["models"]["review" if phase == "review" else task["role"]]
         with self.db:
             self.db.execute("INSERT INTO attempts(id,task_id,revision,number,phase,requested_model,requested_effort,status,started_at,directory) VALUES(?,?,?,?,?,?,?,?,?,?)",
                             (aid, tid, task["revision"], number, phase, model["model"], model["effort"], "running", now(), str(directory)))
         self.event(tid, "attempt.started", {"id": aid, "phase": phase, "feedback": feedback, **model})
+        if self.config.get("bootstrap_required"):
+            self.event(tid, "repository.observed", {"attempt_id": aid, **repository_state(self.project)})
         if phase == "work":
             self.event(tid, "steps.started", {"attempt_id": aid})
         return aid, directory
@@ -295,7 +337,7 @@ class Store:
         task = self.task(attempt["task_id"])
         if (attempt["revision"], attempt["number"]) != (task["revision"], task["attempts"]):
             return
-        known = {step["id"] for step in work_steps(task["stage"])}
+        known = {step["id"] for step in work_steps(task["role"])}
         for row in plan:
             if not isinstance(row, dict) or not isinstance(row.get("step"), str):
                 continue
@@ -317,6 +359,7 @@ class Store:
         return Path(row[0])
 
     def validate_outputs(self, tid, result):
+        self.validate_foundation()
         task = self.task(tid)
         require(isinstance(result, dict) and isinstance(result.get("summary"), str) and result["summary"].strip(), "Kết quả cần có tóm tắt.")
         require(isinstance(result.get("artifacts"), list) and result["artifacts"], "Kết quả cần có đầu ra thực tế.")
@@ -333,7 +376,7 @@ class Store:
         tracking = any(json.loads(row[0]).get("attempt_id") == current_aid for row in tracked)
         steps = result.get("steps")
         if tracking or steps is not None:
-            expected = {step["id"] for step in work_steps(task["stage"])}
+            expected = {step["id"] for step in work_steps(task["role"])}
             require(isinstance(steps, list) and len(steps) == len(expected) and
                     all(isinstance(step, dict) and isinstance(step.get("id"), str) for step in steps) and {step.get("id") for step in steps} == expected,
                     "Kết quả chưa bao phủ đầy đủ các bước nhỏ.")
@@ -344,9 +387,11 @@ class Store:
                         all(isinstance(path, str) and path in declared for path in step["artifacts"]),
                         "Mỗi bước nhỏ cần kết quả và đầu ra có thể kiểm chứng.")
         # Existing sealed results keep their original contract until reopened.
-        filenames = FILES.get(task["stage"], [])
+        filenames = FILES.get(task["role"], [])
         if self.config.get("service_setup_required") and task["stage"] == "architecture":
             filenames = filenames + ["services.json"]
+        if self.config.get("project_setup_required") and task["stage"] == "architecture":
+            filenames = filenames + ["project-setup.json"]
         if task["stage"] == "design" and not tracking and steps is None:
             filenames = ["design.md"]
         for filename in filenames:
@@ -371,6 +416,13 @@ class Store:
                 validate_local_plan(plan, self.services())
         if task["stage"] == "architecture" and self.config.get("service_setup_required"):
             validate_services(json_object(directory / "services.json"))
+        if task["stage"] == "architecture" and self.config.get("project_setup_required"):
+            validate_project_setup(json_object(directory / "project-setup.json"))
+        if task["role"] == "project_setup":
+            require(self.project / "CODING_RULES.md" in paths, "Cần coding rules của dự án trước khi triển khai tính năng.")
+            setup = self.project_setup_contract()
+            if setup["environment_names"]:
+                require(self.project / ".env.example" in paths, "Cần mẫu môi trường an toàn cho các cấu hình đã thiết kế.")
         if task["stage"] == "setup":
             self.validate_readiness(tid, json_object(directory / "readiness.json"), blocked=bool(result.get("blocker")))
         if task["stage"] == "retro":
@@ -389,7 +441,9 @@ class Store:
     def requirement_ids(self):
         task = self.task("analysis")
         require(task["status"] == "done", "Phân tích chưa được chấp nhận.")
-        for item in self.current_evidence("analysis"):
+        records = self.current_evidence("analysis")
+        self.intact(records)
+        for item in records:
             if Path(item["source"]).name == "requirements.json":
                 return validate_requirements(json_object(self.root / item["object_path"]))
         raise WorkflowError("Thiếu danh sách yêu cầu đã chốt.")
@@ -414,6 +468,10 @@ class Store:
     def services(self):
         require(self.task("architecture")["status"] == "done", "Thiết kế kỹ thuật chưa hoàn tất.")
         return validate_services(self.sealed_document("architecture", "services.json"))
+
+    def project_setup_contract(self):
+        require(self.task("architecture")["status"] == "done", "Thiết kế kỹ thuật chưa hoàn tất.")
+        return validate_project_setup(self.sealed_document("architecture", "project-setup.json"))
 
     def validate_readiness(self, tid, value, blocked=False):
         services = [service for service in self.services() if "setup-" + service["id"] == tid]
@@ -440,10 +498,14 @@ class Store:
         self.update(tid, result=result, status="blocked" if blocked else "reviewing",
                     reason=result.get("blocker"), fingerprint=fingerprint(self.project))
         self.event(tid, "work.completed", {"summary": result["summary"], "revision": task["revision"]})
+        if self.config.get("bootstrap_required"):
+            self.event(tid, "repository.observed", {"attempt_id": aid, "phase": "work_finished", **repository_state(self.project)})
 
     def validate_review(self, tid, review):
+        self.validate_foundation()
         task = self.task(tid)
-        require(isinstance(review, dict) and review.get("decision") in {"approve", "rework", "blocked"}, "Review chưa có quyết định hợp lệ.")
+        require(isinstance(review, dict) and isinstance(review.get("decision"), str) and
+                review["decision"] in {"approve", "rework", "blocked"}, "Review chưa có quyết định hợp lệ.")
         require(isinstance(review.get("summary"), str) and review["summary"].strip() and
                 isinstance(review.get("findings"), list), "Review cần nhận xét rõ ràng.")
         if review["decision"] != "approve":
@@ -454,11 +516,13 @@ class Store:
         evidence_ids = {item["id"] for item in records}
         expected = {"C" + str(i + 1) for i in range(len(task["criteria"]))}
         rows = review.get("criteria", [])
-        require(isinstance(rows, list) and len(rows) == len(expected) and {item.get("id") for item in rows} == expected,
+        require(isinstance(rows, list) and len(rows) == len(expected) and
+                all(isinstance(item, dict) and isinstance(item.get("id"), str) for item in rows) and
+                {item.get("id") for item in rows} == expected,
                 "Review chưa đánh giá đầy đủ tiêu chí.")
         for row in rows:
             require(row.get("passed") is True and isinstance(row.get("evidence"), list) and row["evidence"] and
-                    set(row["evidence"]) <= evidence_ids and row.get("reason"), "Tiêu chí chưa đạt hoặc chưa có bằng chứng hợp lệ.")
+                    all(isinstance(eid, str) and eid in evidence_ids for eid in row["evidence"]) and row.get("reason"), "Tiêu chí chưa đạt hoặc chưa có bằng chứng hợp lệ.")
             require(any(row["id"] in item["criteria"] for item in records if item["id"] in row["evidence"]), "Bằng chứng chưa liên kết với tiêu chí được review.")
         if task["result"].get("steps") is not None:
             results = {step["id"]: step for step in task["result"]["steps"]}
@@ -490,7 +554,7 @@ class Store:
             self.validate_review("verify", verify["review"])
 
     def check_commands(self, task):
-        if task["stage"] in {"build", "setup"}:
+        if task["stage"] in {"build", "setup", "project_setup"}:
             return task["checks"]
         if task["stage"] == "verify":
             plan = self.approved_plan()
@@ -502,10 +566,11 @@ class Store:
         self.attempt_update(aid, status="completed", ended_at=now())
         status = {"approve": "awaiting_approval" if self.task(tid)["stage"] in self.config["gates"] else "done",
                   "rework": "rework", "blocked": "blocked"}[review["decision"]]
-        self.update(tid, review=review, status=status, reason=None if status in {"done", "awaiting_approval"} else review["summary"])
-        self.event(tid, "review.completed", {"decision": review["decision"], "status": status})
+        self.update(tid, review=review, status="reviewing" if status == "done" else status,
+                    reason=None if status in {"done", "awaiting_approval"} else review["summary"])
         if status == "done":
             self.accept(tid)
+        self.event(tid, "review.completed", {"decision": review["decision"], "status": status})
 
     def accept(self, tid):
         task = self.task(tid)
@@ -527,9 +592,15 @@ class Store:
                             "checks": service["checks"]} for service in services]
             # Avoid partial expansion: all inserts and dependencies commit together.
             with self.db:
-                self.db.execute("UPDATE tasks SET status='superseded' WHERE stage IN ('build','setup')")
+                base = ["plan"]
+                if self.config.get("project_setup_required"):
+                    setup = self.project_setup_contract()
+                    self.db.execute("UPDATE tasks SET instructions=?,checks=? WHERE id='project_setup'",
+                                    (setup["instructions"], json.dumps(setup["checks"])))
+                    base += ["project_setup"]
+                self.db.execute("UPDATE tasks SET status='superseded' WHERE stage IN ('build','setup') AND id != 'project_setup'")
                 for item in setup_tasks + tasks:
-                    deps = ["plan"] + item["depends_on"] + ["setup-" + sid for sid in item.get("services", [])]
+                    deps = base + item["depends_on"] + ["setup-" + sid for sid in item.get("services", [])]
                     existing = self.db.execute("SELECT id FROM tasks WHERE id=?", (item["id"],)).fetchone()
                     if existing:
                         self.db.execute("UPDATE tasks SET title=?,instructions=?,deps=?,criteria=?,requirements=?,checks=?,status='pending' WHERE id=?",
@@ -635,6 +706,7 @@ class Store:
                      for task in tasks if task["stage"] == "setup" and task["result"] and task["status"] != "superseded"}
         cycle_state = self.db.execute("SELECT value FROM meta WHERE key='state'").fetchone()[0]
         return {"config": config, "project": str(self.project),
+                "foundation": self.foundation(),
                 "state": cycle_state,
                 "tasks": tasks, "stages": stage_progress(tasks, config), "events": events,
                 "development": development_progress(tasks, plan, cycle_state),
@@ -648,6 +720,7 @@ class Store:
                 "decisions": decisions}
 
     def package(self, destination):
+        self.validate_foundation()
         require(all(task["status"] in {"done", "superseded"} for task in self.tasks()), "Chỉ đóng gói khi toàn bộ quy trình đã hoàn tất.")
         records = [item for task in self.snapshot()["tasks"] for item in task["evidence"]]
         self.intact(records)
