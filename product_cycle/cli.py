@@ -19,8 +19,9 @@ def parser():
     init.add_argument("--project", required=True)
     init.add_argument("--brief", required=True, help="File mô tả mục tiêu sản phẩm")
     init.add_argument("--name", required=True)
-    init.add_argument("--model", default="gpt-6.1-sol")
-    init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"], default="high")
+    init.add_argument("--model", help="Dùng model này cho mọi bước thay cho cấu hình theo vai trò")
+    init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"],
+                      help="Dùng effort này cho mọi bước thay cho cấu hình theo vai trò")
     for name in ["status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "serve", "package", "browser-evidence", "judge"]:
         cmd = sub.add_parser(name)
         cmd.add_argument("--project", required=True)

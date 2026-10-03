@@ -9,7 +9,7 @@ from unittest.mock import patch
 from product_cycle.contracts import WorkflowError, validate_plan
 from product_cycle.evals import evaluate
 from product_cycle.fixtures import complete_fixture, prepare_plan
-from product_cycle.runner import run_checks
+from product_cycle.runner import execute, prompt_for, run_checks
 from product_cycle.store import Store, fingerprint, digest, runner_lock, write_json
 
 
@@ -176,6 +176,115 @@ class WorkflowTests(unittest.TestCase):
     def test_eval_suite(self):
         report = evaluate()
         self.assertTrue(report["passed"], json.dumps(report))
+
+    def test_worker_progress_is_advisory_and_survives_event_window(self):
+        aid, _ = self.store.begin("analysis", "work")
+        self.store.step_progress(aid, [{"step": "S1 Identify users", "status": "completed"},
+                                       {"step": "S2 Identify problem", "status": "in_progress"},
+                                       {"step": "S99 Invented", "status": "completed"}])
+        for index in range(260):
+            self.store.event(None, "fixture", {"index": index})
+        state = self.store.snapshot()
+        steps = {step["id"]: step for step in state["tasks"][0]["steps"]}
+        self.assertEqual(steps["S1"]["status"], "reported")
+        self.assertEqual(steps["S2"]["status"], "running")
+        self.assertNotIn("S99", steps)
+        self.assertEqual(state["stages"][0]["completed"], 0)
+
+    def test_result_and_review_require_small_step_coverage(self):
+        complete_fixture(self.store, "analysis", approve=False)
+        result = self.store.task("analysis")["result"]
+        result["steps"].pop()
+        with self.assertRaises(WorkflowError):
+            self.store.validate_outputs("analysis", result)
+        review = self.store.task("analysis")["review"]
+        review["steps"].pop()
+        with self.assertRaises(WorkflowError):
+            self.store.validate_review("analysis", review)
+
+    def test_review_step_must_reference_its_actual_output(self):
+        complete_fixture(self.store, "analysis", approve=False)
+        result = self.store.task("analysis")["result"]
+        records = self.store.current_evidence("analysis")
+        result["steps"][0]["artifacts"] = [records[0]["source"]]
+        self.store.update("analysis", result=result)
+        review = self.store.task("analysis")["review"]
+        review["steps"][0]["evidence"] = [records[1]["id"]]
+        with self.assertRaises(WorkflowError):
+            self.store.validate_review("analysis", review)
+
+    def test_owner_gate_is_part_of_progress_and_reopen_resets_steps(self):
+        complete_fixture(self.store, "analysis", approve=False)
+        stage = self.store.snapshot()["stages"][0]
+        self.assertEqual(stage["completed"], stage["total"] - 1)
+        self.assertEqual(stage["steps"][-1]["status"], "awaiting_approval")
+        self.store.decide("analysis", "approve", "Owner", "Approved scope")
+        self.assertEqual(self.store.snapshot()["stages"][0]["percent"], 100)
+        self.store.reopen("analysis", "New scope")
+        stage = self.store.snapshot()["stages"][0]
+        self.assertEqual(stage["completed"], 0)
+        self.assertTrue(all(not step["evidence"] for step in stage["steps"]))
+
+    def test_historical_results_are_untracked_instead_of_invented(self):
+        complete_fixture(self.store, "analysis")
+        task = self.store.task("analysis")
+        task["result"].pop("steps")
+        task["review"].pop("steps")
+        self.store.update("analysis", result=task["result"], review=task["review"])
+        with self.store.db:
+            self.store.db.execute("DELETE FROM events WHERE task_id='analysis' AND type='steps.started'")
+        steps = self.store.snapshot()["tasks"][0]["steps"]
+        self.assertTrue(all(step["status"] == "untracked" for step in steps if step["id"].startswith("S")))
+        self.store.validate_review("analysis", task["review"])
+
+    def test_ui_baseline_needs_a_registered_visual_reference(self):
+        complete_fixture(self.store, "analysis")
+        complete_fixture(self.store, "design", approve=False)
+        path = self.store.latest_directory("design") / "design-baseline.json"
+        value = json.loads(path.read_text())
+        value.update(has_ui=True, visual_reference="missing-reference.png")
+        write_json(path, value)
+        with self.assertRaises(WorkflowError):
+            self.store.validate_outputs("design", self.store.task("design")["result"])
+
+    def test_retry_receives_review_and_owner_feedback(self):
+        complete_fixture(self.store, "analysis", approve=False)
+        self.store.decide("analysis", "reject", "Owner", "Narrow the first version")
+        _, directory = self.store.begin("analysis", "work")
+        prompt_for(self.store, self.store.task("analysis"), directory)
+        feedback = json.loads((directory / "context.json").read_text())["feedback"]
+        self.assertEqual(feedback["reason"], "Narrow the first version")
+        self.assertIsNotNone(feedback["review"])
+        self.assertTrue(feedback["previous_outputs"])
+
+    def test_runtime_plan_notifications_are_scoped_to_the_current_turn(self):
+        config = self.store.config
+        config["mode"] = "live"
+        write_json(self.store.root / "config.json", config)
+
+        class Peer:
+            def __init__(self, directory, on_event):
+                self.notify = on_event
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
+            def run(self, *args, **kwargs):
+                self.notify({"method": "client/threadReady", "params": {"thread_id": "current"}})
+                self.notify({"method": "client/turnReady", "params": {"turn_id": "turn"}})
+                self.notify({"method": "turn/plan/updated", "params": {"threadId": "other", "turnId": "turn", "plan": [{"step": "S3 Ignore", "status": "completed"}]}})
+                self.notify({"method": "turn/plan/updated", "params": {"threadId": "current", "turnId": "turn", "plan": [{"step": "S1 Inputs", "status": "completed"}, {"step": "S2 Problem", "status": "in_progress"}]}})
+                raise WorkflowError("Controlled interruption")
+
+        with self.assertRaises(WorkflowError):
+            execute(self.store, "analysis", client_factory=Peer)
+        steps = {step["id"]: step for step in self.store.snapshot()["tasks"][0]["steps"]}
+        self.assertEqual(steps["S1"]["status"], "reported")
+        self.assertEqual(steps["S2"]["status"], "blocked")
+        self.assertEqual(steps["S3"]["status"], "pending")
 
 
 if __name__ == "__main__":

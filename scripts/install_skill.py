@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install only this skill into a user-selected project's discoverable directory."""
+"""Install the workflow skill bundle into a selected project, without overwriting."""
 
 import argparse
 import shutil
@@ -14,14 +14,27 @@ def main():
     project = Path(args.project).expanduser().resolve()
     if not project.is_dir():
         raise SystemExit("Choose an existing project directory.")
-    target = project / ".agents" / "skills" / "product-cycle"
-    if target.exists():
-        raise SystemExit("An installed skill already exists; inspect it before replacing.")
-    shutil.copytree(repository / "skills" / "product-cycle", target)
+    sources = sorted((repository / "skills").glob("product-cycle*"))
+    destination = project / ".agents" / "skills"
+    conflicts = [source.name for source in sources if (destination / source.name).exists()]
+    if conflicts:
+        raise SystemExit("Installed skills already exist; inspect them before replacing: " + ", ".join(conflicts))
+    installed = []
+    try:
+        for source in sources:
+            target = destination / source.name
+            installed.append(target)
+            shutil.copytree(source, target)
+    except BaseException:
+        for target in installed:
+            if target.is_dir():
+                shutil.rmtree(target)
+        raise
+    target = destination / "product-cycle"
     guide = target / "references" / "operating-guide.md"
     with guide.open("a") as output:
         output.write("\nInstalled controller repository: `" + str(repository) + "`.\n")
-    print(str(target))
+    print("Installed " + str(len(sources)) + " skills in " + str(destination))
 
 
 if __name__ == "__main__":

@@ -73,6 +73,10 @@ class DashboardTests(unittest.TestCase):
             updated = json.load(response)
         self.assertEqual(updated["tasks"][0]["status"], "done")
         self.assertEqual(updated["decisions"][-1]["actor"], "Test operator")
+        self.assertEqual(updated["stages"][0]["percent"], 100)
+        self.assertEqual(len(updated["stages"]), 8)
+        self.assertTrue(all(stage["steps"] for stage in updated["stages"]))
+        self.assertTrue(all(step["status"] == "done" for step in updated["tasks"][0]["steps"]))
 
 
 if __name__ == "__main__":

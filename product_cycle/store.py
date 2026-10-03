@@ -12,7 +12,7 @@ import uuid
 from pathlib import Path
 
 from .contracts import (CRITERIA, FILES, STAGE_TITLES, WorkflowError, defaults,
-                        json_object, require, validate_plan, validate_requirements)
+                        json_object, require, validate_plan, validate_requirements, work_steps)
 
 
 def now():
@@ -81,7 +81,7 @@ class Store:
         self.db.execute("PRAGMA foreign_keys=ON")
 
     @classmethod
-    def create(cls, project, brief, name, model="gpt-6.1-sol", effort="high", mode="live"):
+    def create(cls, project, brief, name, model=None, effort=None, mode="live"):
         project = Path(project).expanduser().resolve()
         project.mkdir(parents=True, exist_ok=True)
         root = state_root(project)
@@ -249,11 +249,17 @@ class Store:
 
     def begin(self, tid, phase):
         task = self.task(tid)
+        feedback = None
         require(phase in {"work", "review"}, "Giai đoạn thực thi không hợp lệ.")
         if phase == "work":
             require(task["status"] in {"pending", "rework", "stale", "blocked"}, "Công việc chưa sẵn sàng thực thi.")
             require(all(self.task(dep)["status"] == "done" for dep in task["deps"]), "Phụ thuộc chưa hoàn tất.")
             require(task["attempts"] < self.config["max_attempts"], "Đã đạt giới hạn số lần thực hiện; cần xác định nguyên nhân trước khi tiếp tục.")
+            if task["reason"] or task["review"]:
+                feedback = {"reason": task["reason"], "review": task["review"],
+                            "previous_outputs": [{"id": item["id"], "path": str(self.root / item["object_path"]),
+                                                   "original_path": item["source"]}
+                                                  for item in self.current_evidence(tid) if item["kind"] == "artifact"]}
             number = task["attempts"] + 1
             self.update(tid, status="running", attempts=number, reason=None, result=None, review=None)
         else:
@@ -271,8 +277,27 @@ class Store:
         with self.db:
             self.db.execute("INSERT INTO attempts(id,task_id,revision,number,phase,requested_model,requested_effort,status,started_at,directory) VALUES(?,?,?,?,?,?,?,?,?,?)",
                             (aid, tid, task["revision"], number, phase, model["model"], model["effort"], "running", now(), str(directory)))
-        self.event(tid, "attempt.started", {"id": aid, "phase": phase, **model})
+        self.event(tid, "attempt.started", {"id": aid, "phase": phase, "feedback": feedback, **model})
+        if phase == "work":
+            self.event(tid, "steps.started", {"attempt_id": aid})
         return aid, directory
+
+    def step_progress(self, aid, plan):
+        """Transport reports are advisory; only review can confirm a work step."""
+        attempt = self.db.execute("SELECT * FROM attempts WHERE id=?", (aid,)).fetchone()
+        if not attempt or attempt["phase"] != "work" or attempt["status"] != "running" or not isinstance(plan, list):
+            return
+        task = self.task(attempt["task_id"])
+        if (attempt["revision"], attempt["number"]) != (task["revision"], task["attempts"]):
+            return
+        known = {step["id"] for step in work_steps(task["stage"])}
+        for row in plan:
+            if not isinstance(row, dict) or not isinstance(row.get("step"), str):
+                continue
+            sid = row["step"].split(" ", 1)[0].rstrip(".:·")
+            status = {"pending": "pending", "in_progress": "running", "completed": "reported"}.get(row.get("status"))
+            if sid in known and status:
+                self.event(task["id"], "step.progress", {"attempt_id": aid, "step": sid, "status": status})
 
     def attempt_update(self, aid, **fields):
         allowed = {"thread_id", "turn_id", "observed_model", "observed_effort", "tokens", "status", "ended_at"}
@@ -298,8 +323,38 @@ class Store:
             require(isinstance(item, dict) and isinstance(item.get("purpose"), str) and item["purpose"].strip(), "Đầu ra cần có mục đích.")
             require(isinstance(item.get("criteria"), list) and isinstance(item.get("requirements"), list), "Đầu ra cần liên kết tiêu chí và yêu cầu.")
             paths.append(self.safe_path(item.get("path")))
-        for filename in FILES.get(task["stage"], []):
+        tracked = self.db.execute("SELECT data FROM events WHERE task_id=? AND type='steps.started'", (tid,)).fetchall()
+        current_aid = tid + ":r" + str(task["revision"]) + ":a" + str(task["attempts"]) + ":work"
+        tracking = any(json.loads(row[0]).get("attempt_id") == current_aid for row in tracked)
+        steps = result.get("steps")
+        if tracking or steps is not None:
+            expected = {step["id"] for step in work_steps(task["stage"])}
+            require(isinstance(steps, list) and len(steps) == len(expected) and
+                    all(isinstance(step, dict) and isinstance(step.get("id"), str) for step in steps) and {step.get("id") for step in steps} == expected,
+                    "Kết quả chưa bao phủ đầy đủ các bước nhỏ.")
+            declared = {item["path"] for item in result["artifacts"]}
+            for step in steps:
+                require(isinstance(step.get("summary"), str) and step["summary"].strip() and
+                        isinstance(step.get("artifacts"), list) and step["artifacts"] and
+                        all(isinstance(path, str) and path in declared for path in step["artifacts"]),
+                        "Mỗi bước nhỏ cần kết quả và đầu ra có thể kiểm chứng.")
+        # Existing sealed results keep their original contract until reopened.
+        filenames = FILES.get(task["stage"], [])
+        if task["stage"] == "design" and not tracking and steps is None:
+            filenames = ["design.md"]
+        for filename in filenames:
             require(directory / filename in paths, "Thiếu đầu ra bắt buộc: " + filename)
+        if task["stage"] == "design" and "design-baseline.json" in filenames:
+            baseline = json_object(directory / "design-baseline.json")
+            require(isinstance(baseline.get("has_ui"), bool), "Mốc thiết kế cần xác định sản phẩm có giao diện hay không.")
+            for field in ["flows", "states", "acceptance"]:
+                require(isinstance(baseline.get(field), list) and baseline[field] and
+                        all(isinstance(value, str) and value.strip() for value in baseline[field]), "Mốc thiết kế cần luồng, trạng thái và tiêu chí nghiệm thu.")
+            require(isinstance(baseline.get("rules"), dict) and baseline["rules"], "Mốc thiết kế cần các quy tắc giao diện hoặc hợp đồng tương tác.")
+            if baseline["has_ui"]:
+                reference = baseline.get("visual_reference")
+                require(isinstance(reference, str) and reference in {item["path"] for item in result["artifacts"]}, "Cần đầu ra trực quan đã đăng ký để duyệt thiết kế.")
+                require(self.safe_path(reference).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".html", ".pdf", ".svg"}, "Mốc thiết kế cần ảnh, prototype hoặc tài liệu trực quan.")
         if task["stage"] == "analysis":
             validate_requirements(json_object(directory / "requirements.json"))
         if task["stage"] == "plan":
@@ -361,6 +416,18 @@ class Store:
             require(row.get("passed") is True and isinstance(row.get("evidence"), list) and row["evidence"] and
                     set(row["evidence"]) <= evidence_ids and row.get("reason"), "Tiêu chí chưa đạt hoặc chưa có bằng chứng hợp lệ.")
             require(any(row["id"] in item["criteria"] for item in records if item["id"] in row["evidence"]), "Bằng chứng chưa liên kết với tiêu chí được review.")
+        if task["result"].get("steps") is not None:
+            results = {step["id"]: step for step in task["result"]["steps"]}
+            step_reviews = review.get("steps")
+            require(isinstance(step_reviews, list) and len(step_reviews) == len(results) and
+                    all(isinstance(step, dict) and isinstance(step.get("id"), str) for step in step_reviews) and
+                    {step.get("id") for step in step_reviews} == set(results), "Review chưa đánh giá đầy đủ các bước nhỏ.")
+            for step in step_reviews:
+                require(step.get("passed") is True and isinstance(step.get("reason"), str) and step["reason"].strip() and
+                        isinstance(step.get("evidence"), list) and step["evidence"] and
+                        all(isinstance(eid, str) and eid in evidence_ids for eid in step["evidence"]), "Bước nhỏ chưa đạt hoặc thiếu bằng chứng review.")
+                require(any(item["id"] in step["evidence"] and item["source"] in results[step["id"]]["artifacts"]
+                            for item in records), "Bằng chứng review chưa đối chiếu đúng đầu ra của bước nhỏ.")
         checks = [item for item in records if item["kind"] == "check"]
         required_checks = task["checks"] if task["stage"] == "build" else self.approved_plan().get("verification_commands", []) if task["stage"] == "verify" else []
         for command in required_checks:
@@ -462,21 +529,34 @@ class Store:
         return recovered
 
     def snapshot(self, full_history=False):
+        from .progress import task_progress, stage_progress
         tasks = self.tasks()
+        config = self.config
+        progress_events = [dict(row) for row in self.db.execute("SELECT task_id,type,data,created_at FROM events WHERE type IN ('steps.started','step.progress') ORDER BY id")]
+        for event in progress_events:
+            event["data"] = json.loads(event["data"])
+        decisions = [dict(row) for row in self.db.execute("SELECT * FROM decisions ORDER BY id")]
         for task in tasks:
             history = []
             for revision in range(1, task["revision"] + 1):
                 history.extend(self.evidence(task["id"], revision))
             task["evidence"] = history
             task["attempt_history"] = [dict(row) for row in self.db.execute("SELECT * FROM attempts WHERE task_id=? ORDER BY rowid", (task["id"],))]
+            task["steps"] = task_progress(task, tasks, config, progress_events, decisions, self.root)
+            if task["stage"] == "design":
+                current = self.current_evidence(task["id"])
+                baseline = next((item for item in current if Path(item["source"]).name == "design-baseline.json"), None)
+                if baseline:
+                    task["design_baseline"] = json_object(self.root / baseline["object_path"])
+                    task["design_baseline"]["reference_evidence"] = next((item["id"] for item in current if item["source"] == task["design_baseline"].get("visual_reference")), None)
         events = [dict(row) for row in self.db.execute("SELECT * FROM events ORDER BY id DESC" + ("" if full_history else " LIMIT 250"))]
         for event in events:
             event["data"] = json.loads(event["data"])
-        return {"config": self.config, "project": str(self.project),
+        return {"config": config, "project": str(self.project),
                 "state": self.db.execute("SELECT value FROM meta WHERE key='state'").fetchone()[0],
-                "tasks": tasks, "events": events,
+                "tasks": tasks, "stages": stage_progress(tasks, config), "events": events,
                 "tokens": self.db.execute("SELECT SUM(tokens) FROM attempts").fetchone()[0],
-                "decisions": [dict(row) for row in self.db.execute("SELECT * FROM decisions ORDER BY id")]}
+                "decisions": decisions}
 
     def package(self, destination):
         require(all(task["status"] in {"done", "superseded"} for task in self.tasks()), "Chỉ đóng gói khi toàn bộ quy trình đã hoàn tất.")

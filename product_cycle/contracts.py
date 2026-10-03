@@ -13,10 +13,74 @@ STAGE_TITLES = {
 }
 FILES = {
     "analysis": ["analysis.md", "requirements.json"],
-    "design": ["design.md"], "architecture": ["architecture.md"],
+    "design": ["design.md", "design-baseline.json"], "architecture": ["architecture.md"],
     "plan": ["plan.json"], "verify": ["acceptance.md"],
     "handoff": ["handoff.md"], "retro": ["retro.json"],
 }
+
+# Local task IDs remain stable across retries; progress is scoped to each attempt.
+WORK_STEPS = {
+    "analysis": [
+        ("Xác định người dùng và mục tiêu", "Nêu ai sử dụng sản phẩm và kết quả họ cần đạt."),
+        ("Làm rõ vấn đề", "Mô tả tình huống sử dụng, khó khăn và nhu cầu chính."),
+        ("Đối chiếu dữ kiện và giả định", "Ghi nguồn, giả định và câu hỏi còn ảnh hưởng tới quyết định."),
+        ("Chốt phạm vi", "Xác định phiên bản đầu tiên, giới hạn và những phần để sau."),
+        ("Viết yêu cầu và tiêu chí", "Mỗi yêu cầu có hành vi quan sát được để nghiệm thu."),
+    ],
+    "design": [
+        ("Vẽ luồng thao tác", "Liên kết hành trình chính với yêu cầu đã chốt."),
+        ("Khảo sát hướng thiết kế", "Dùng thiết kế hiện có hoặc tạo phương án bằng Product Design và Image Gen khi công cụ sẵn có."),
+        ("Đề xuất mốc thiết kế", "Lưu hình tham khảo hoặc prototype cụ thể để chủ sản phẩm duyệt."),
+        ("Bổ sung trạng thái màn hình", "Mô tả dữ liệu, trống, tải, lỗi và hoàn thành theo tính năng."),
+        ("Chốt quy tắc và cách nghiệm thu", "Ghi màu, font, khoảng cách, bố cục thích ứng và tiêu chí so sánh."),
+    ],
+    "architecture": [
+        ("Đọc cấu trúc hiện có", "Xác định phần code và quy tắc liên quan; dùng lại thành phần phù hợp."),
+        ("Thiết kế dữ liệu và giao tiếp", "Mô tả dữ liệu, ranh giới thành phần và hợp đồng giao tiếp."),
+        ("Chọn cách triển khai", "Ghi lựa chọn phù hợp phạm vi và lý do đánh đổi."),
+        ("Xử lý điểm chưa chắc", "Kiểm chứng phần kỹ thuật có rủi ro hoặc ghi rõ điều còn bị chặn."),
+        ("Xác định cách kiểm tra và khôi phục", "Nêu cách chứng minh tính đúng và khôi phục khi cần."),
+    ],
+    "plan": [
+        ("Chia lát chức năng", "Mỗi công việc tạo ra một kết quả có thể nhận và kiểm tra."),
+        ("Sắp xếp phụ thuộc", "Xác định thứ tự thực hiện, tránh vòng lặp phụ thuộc."),
+        ("Viết hợp đồng công việc", "Ghi đầu vào, phạm vi, yêu cầu liên quan và tiêu chí hoàn tất."),
+        ("Chọn cách kiểm chứng", "Dùng kiểm tra phù hợp và kiểm chứng trình duyệt khi trải nghiệm yêu cầu."),
+        ("Xác định giới hạn thực thi", "Ghi khả năng công cụ, số lần thử và điều kiện dừng."),
+    ],
+    "build": [
+        ("Đọc đầu vào và tái hiện", "Đọc yêu cầu, mốc thiết kế và code liên quan; tái hiện lỗi nếu đang sửa bug."),
+        ("Triển khai trong phạm vi", "Dùng mẫu hiện có và chỉ sửa phần phục vụ công việc."),
+        ("Hoàn thiện hành vi và trạng thái", "Đáp ứng luồng chính cùng các trường hợp cần thiết."),
+        ("Đối chiếu thay đổi", "Xem lại phần code đã sửa, đầu ra và hạn chế trước khi gửi kiểm chứng."),
+    ],
+    "verify": [
+        ("Lập đối chiếu yêu cầu", "Liên kết từng tiêu chí nghiệm thu với cách kiểm chứng."),
+        ("Kiểm tra kết quả đã ghi", "Đọc kết quả thực tế và xác định đúng phiên bản sản phẩm."),
+        ("Đánh giá trải nghiệm", "So sánh giao diện với mốc thiết kế và thử hành trình; ghi thiếu bằng chứng khi chưa thể quan sát."),
+        ("Ghi sai lệch và hạn chế", "Phân biệt lỗi, giới hạn được chấp nhận và phần chưa kiểm chứng."),
+        ("Kết luận nghiệm thu", "Kết luận dựa trên bằng chứng, giữ nguyên tiêu chí đã chốt."),
+    ],
+    "handoff": [
+        ("Xác định phiên bản bàn giao", "Liên kết bản bàn giao với đúng phiên bản đã nghiệm thu."),
+        ("Viết hướng dẫn chạy và sử dụng", "Ghi cách thiết lập và thao tác để người nhận sử dụng được."),
+        ("Tập hợp đầu ra và bằng chứng", "Liên kết tài liệu, source và kết quả kiểm chứng."),
+        ("Ghi cách khôi phục", "Nêu phương án khôi phục phù hợp với cách bàn giao."),
+        ("Chốt hạn chế và việc tiếp theo", "Ghi rõ những phần chưa thực hiện hoặc chưa kiểm chứng."),
+    ],
+    "retro": [
+        ("Đọc lịch sử và phản hồi", "Dùng bằng chứng của lần chạy để xác định điều thực sự xảy ra."),
+        ("Tìm nguyên nhân phải làm lại", "Xác định thiếu đầu vào, lỗi quy trình và can thiệp cần thiết."),
+        ("Chọn cải tiến có tác động", "Ưu tiên thay đổi nhỏ giải quyết vấn đề đã quan sát."),
+        ("Thiết kế tình huống đánh giá", "Nêu đầu vào và kết quả mong đợi để kiểm chứng cải tiến."),
+        ("Đề xuất cho vòng sau", "Đưa đề xuất có bằng chứng; chưa tự thay đổi quy trình đang chạy."),
+    ],
+}
+
+
+def work_steps(stage):
+    return [{"id": "S" + str(i + 1), "title": title, "description": description}
+            for i, (title, description) in enumerate(WORK_STEPS[stage])]
 CRITERIA = {
     "analysis": ["Người dùng, vấn đề, kết quả mong muốn và phạm vi rõ ràng",
                  "Dữ kiện, giả định, điều chưa biết được phân biệt; yêu cầu có tiêu chí nghiệm thu"],
@@ -35,11 +99,14 @@ CRITERIA = {
 }
 
 
-def defaults(model="gpt-6.1-sol", effort="high"):
+def defaults(model=None, effort=None):
     return {
         "version": 1, "workflow_version": "0.1.0", "mode": "live",
-        "models": {stage: {"model": model, "effort": effort} for stage in STAGES + ["review"]},
-        "gates": ["analysis", "plan", "handoff"],
+        "models": {stage: {
+            "model": model or ("gpt-6-astra" if stage in {"analysis", "design", "architecture"} else "gpt-6.1-sol"),
+            "effort": effort or ("high" if stage == "review" else "medium"),
+        } for stage in STAGES + ["review"]},
+        "gates": ["analysis", "design", "plan", "handoff"],
         "max_attempts": 2, "turn_timeout_seconds": 900,
         "max_turn_tokens": 400000, "max_cycle_tokens": 2000000,
         "network_access": True, "verification_commands": [],
@@ -60,6 +127,9 @@ RESULT_SCHEMA = object_schema({
         "path": {"type": "string"}, "purpose": {"type": "string"},
         "criteria": STRINGS, "requirements": STRINGS,
     })},
+    "steps": {"type": "array", "items": object_schema({
+        "id": {"type": "string"}, "summary": {"type": "string"}, "artifacts": STRINGS,
+    })},
     "limitations": STRINGS,
     "blocker": {"type": ["string", "null"]},
 })
@@ -67,6 +137,10 @@ REVIEW_SCHEMA = object_schema({
     "decision": {"type": "string", "enum": ["approve", "rework", "blocked"]},
     "summary": {"type": "string"},
     "criteria": {"type": "array", "items": object_schema({
+        "id": {"type": "string"}, "passed": {"type": "boolean"},
+        "evidence": STRINGS, "reason": {"type": "string"},
+    })},
+    "steps": {"type": "array", "items": object_schema({
         "id": {"type": "string"}, "passed": {"type": "boolean"},
         "evidence": STRINGS, "reason": {"type": "string"},
     })},

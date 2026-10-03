@@ -6,6 +6,7 @@
 |---|---|
 | [Iterating Development Workflows](https://developers.openai.com/cookbook/examples/codex/iterating-development-workflows-with-codex) | Kế hoạch riêng với lịch sử thực tế; quyết định và tiêu chí |
 | [Codex App Server](https://learn.chatgpt.com/docs/app-server) | Phiên, model/effort, sự kiện và trạng thái thực thi |
+| [Model selection](https://developers.openai.com/api/docs/guides/model-selection) | Astra cho phân tích và thiết kế; Sol cho thực thi; phân công cụ thể là đề xuất của Product Cycle, cần so sánh trên cùng đầu vào |
 | [Build skills](https://developers.openai.com/plugins/build/skills) | Đóng gói hướng dẫn và tài liệu theo nhu cầu |
 | [Rethinking skills and prompts](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra) | Hướng dẫn ngắn, ngữ cảnh liên quan, quy trình phù hợp quy mô |
 | [Testing Agent Skills with Evals](https://developers.openai.com/blog/eval-skills) | Đánh giá đầu ra, quá trình và hiệu suất |

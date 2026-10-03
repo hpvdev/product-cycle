@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from .codex import CodexClient
-from .contracts import FILES, RESOURCES, RESULT_SCHEMA, REVIEW_SCHEMA, WorkflowError, require
+from .contracts import FILES, RESOURCES, RESULT_SCHEMA, REVIEW_SCHEMA, WorkflowError, require, work_steps
 from .store import fingerprint, now, write_json, runner_lock
 
 
@@ -32,9 +32,18 @@ def context(store, task):
 def prompt_for(store, task, directory, review=False):
     role = "review" if review else task["stage"]
     guide = (RESOURCES / "roles" / (role + ".md")).read_text()
+    installed_skill = store.project / ".agents" / "skills" / ("product-cycle-" + role) / "SKILL.md"
+    if installed_skill.is_file():
+        guide = installed_skill.read_text() + "\n\n" + guide
     packet = context(store, task)
     packet["artifact_directory"] = str(directory)
     packet["required_files"] = FILES.get(task["stage"], [])
+    packet["work_steps"] = work_steps(task["stage"])
+    packet["skill"] = {"name": "product-cycle-" + role, "path": str(installed_skill) if installed_skill.is_file() else None}
+    if not review:
+        aid = task["id"] + ":r" + str(task["revision"]) + ":a" + str(task["attempts"]) + ":work"
+        starts = store.db.execute("SELECT data FROM events WHERE task_id=? AND type='attempt.started' ORDER BY id DESC", (task["id"],))
+        packet["feedback"] = next((data.get("feedback") for row in starts for data in [json.loads(row[0])] if data.get("id") == aid), None)
     if review:
         packet["current_evidence"] = store.current_evidence(task["id"])
         packet["work_result"] = task["result"]
@@ -44,8 +53,11 @@ def prompt_for(store, task, directory, review=False):
     prompt = (RESOURCES / "policy.md").read_text() + "\n\n" + guide + "\n\n" + json.dumps(packet, ensure_ascii=False, indent=2)
     if not review:
         prompt += "\nCreate the required files in artifact_directory. Build tasks may also change product code within the project. Return the supplied result schema with project-relative artifact paths. Do not run verification commands from the plan: the controller runs those once after your work. Do not change controller state, policy, databases, evidence objects, or skills."
+        prompt += "\nUse update_plan when available, with exactly the work_steps and step text beginning with the ID followed by a space (for example S1 Read inputs). Update pending/in_progress/completed as work actually progresses. These reports are advisory and do not approve work. Include every work step in result.steps with a concrete summary and project-relative artifact paths drawn from result.artifacts. Do not mark a step completed based only on intended work."
+        prompt += "\nWhen feedback is present, address the recorded reviewer findings and operator reason. Previous outputs are repair context, not accepted inputs. Preserve the approved criteria and scope."
     else:
         prompt += "\nThis is an independent read-only review. Inspect actual artifact content and relevant product code. Use the recorded evidence IDs. Return the supplied review schema; do not change files or treat a worker's claims as observations."
+        prompt += "\nAssess each work_result.steps entry independently against work_steps. Return all IDs in review.steps with passed, real evidence IDs, and an inspected-content reason. Approve only when each step is supported. For historical results without steps, return an empty steps array and review the original criteria."
     (directory / "prompt.md").write_text(prompt)
     return prompt
 
@@ -118,6 +130,11 @@ def run_phase(store, task, aid, directory, review, client_factory):
                 store.attempt_update(aid, tokens=value)
         elif method == "model/rerouted":
             store.attempt_update(aid, observed_model=params.get("toModel"))
+            store.event(task["id"], method, params)
+        elif method == "turn/plan/updated":
+            attempt = store.db.execute("SELECT thread_id,turn_id FROM attempts WHERE id=?", (aid,)).fetchone()
+            if not review and params.get("threadId") == attempt["thread_id"] and params.get("turnId") == attempt["turn_id"]:
+                store.step_progress(aid, params.get("plan"))
             store.event(task["id"], method, params)
         elif method in {"item/started", "item/completed", "turn/started", "turn/completed", "warning", "error", "turn/plan/updated"} or "request" in method.lower():
             # Stream meaningful activity without filling the journal with text deltas.
