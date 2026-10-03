@@ -6,17 +6,30 @@ from .contracts import FILES, work_steps
 from .store import write_json, fingerprint
 
 
-def complete_fixture(store, tid, approve=True, plan=None, review_decision="approve"):
+def complete_fixture(store, tid, approve=True, plan=None, review_decision="approve", services=None, readiness=None, blocker=None):
     task = store.task(tid)
     aid, directory = store.begin(tid, "work")
     artifacts = []
     filenames = FILES.get(task["stage"], ["increment.md"])
+    if task["stage"] == "architecture" and store.config.get("service_setup_required"):
+        filenames = filenames + ["services.json"]
     for filename in filenames:
         path = directory / filename
         if filename == "requirements.json":
             write_json(path, {"requirements": [{"id": "R1", "description": "Ghi và đọc lại một thông tin", "acceptance": ["Thông tin đã lưu có thể đọc lại"]}]})
         elif filename == "plan.json":
-            write_json(path, plan or {"tasks": [{"id": "T1", "title": "Lưu thông tin", "instructions": "Tạo khả năng lưu và đọc", "depends_on": [], "requirements": ["R1"], "criteria": ["Đọc lại dữ liệu đã lưu"], "checks": []}], "verification_commands": [], "browser_required": False})
+            value = plan or {"tasks": [{"id": "T1", "title": "Lưu thông tin", "instructions": "Tạo khả năng lưu và đọc", "depends_on": [], "requirements": ["R1"], "criteria": ["Đọc lại dữ liệu đã lưu"], "checks": []}], "verification_commands": [], "browser_required": False}
+            if store.config.get("service_setup_required") and plan is None:
+                value.update(service_ids=[service["id"] for service in store.services()],
+                             delivery={"mode": "local", "access": "Bản local minh họa", "instructions": "Hợp đồng minh họa, chưa có sản phẩm thật.", "run_commands": [], "deferred": ["VPS và phát hành ra ngoài"]})
+                value["tasks"][0]["services"] = value["service_ids"]
+            write_json(path, value)
+        elif filename == "services.json":
+            write_json(path, {"services": services or []})
+        elif filename == "readiness.json":
+            service = next(service for service in store.services() if "setup-" + service["id"] == tid)
+            write_json(path, readiness or {"services": [{"id": service["id"], "status": "ready",
+                                                        "note": "Kết quả tổng hợp, chưa kết nối dịch vụ thật.", "input_refs": service["inputs"]}]})
         elif filename == "retro.json":
             write_json(path, {"observations": [], "improvements": []})
         elif filename == "design-baseline.json":
@@ -32,9 +45,11 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
     result = {"summary": "Kết quả minh họa cho " + task["title"], "artifacts": artifacts,
               "steps": [{"id": step["id"], "summary": "Kết quả tổng hợp: " + step["title"],
                          "artifacts": [item["path"] for item in artifacts]} for step in work_steps(task["stage"])],
-              "limitations": ["Dữ liệu tổng hợp, chưa có đánh giá AI."], "blocker": None}
+              "limitations": ["Dữ liệu tổng hợp, chưa có đánh giá AI."], "blocker": blocker}
     write_json(directory / "result.json", result)
     store.work_finished(tid, aid, result)
+    if blocker:
+        return store.task(tid)
     from .runner import run_checks
     run_checks(store, store.task(tid), aid, directory)
     store.update(tid, fingerprint=fingerprint(store.project))

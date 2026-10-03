@@ -1,5 +1,5 @@
-# Handoff
+# Local product handoff
 
-Produce handoff.md in artifact_directory with the product version, source location, setup/run instructions, verification results, accepted requirement coverage, known limitations, and recovery guidance. Link evidence IDs and state what was not verified. Distinguish local delivery from publication or production deployment.
+Produce handoff.md for the exact local product version that passed verification. Include how the owner opens and uses the web/app locally, any local startup commands or installable local build, access/test accounts without secrets, confirmed requirement coverage and recorded evidence. Identify integration gaps, known limitations and suitable recovery steps. A screenshot supports visual inspection but does not prove interaction behavior.
 
-Keep the product source unchanged during handoff so acceptance remains bound to its verified fingerprint. The product owner explicitly accepts this handoff. The controller then allows retro and an evidence package; a separately authorized deployment would be a later workflow action.
+Current delivery is local. VPS provisioning, remote web deployment and DeployGate distribution are future release work; record them as deferred, not completed or blocking the local handoff. Do not deploy or purchase infrastructure. Keep product source unchanged during handoff so verification remains bound to the same version. Owner acceptance happens here; earlier independent reviews are not owner acceptance. If the owner rejects, repair through the controller's reopen mechanism to preserve history and repeat affected checks.

@@ -9,7 +9,7 @@ from unittest.mock import patch
 from product_cycle.contracts import WorkflowError, validate_plan
 from product_cycle.evals import evaluate
 from product_cycle.fixtures import complete_fixture, prepare_plan
-from product_cycle.runner import execute, prompt_for, run_checks
+from product_cycle.runner import execute, prompt_for, run_checks, run_cycle
 from product_cycle.store import Store, fingerprint, digest, runner_lock, write_json
 
 
@@ -285,6 +285,140 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(steps["S1"]["status"], "reported")
         self.assertEqual(steps["S2"]["status"], "blocked")
         self.assertEqual(steps["S3"]["status"], "pending")
+
+    def test_all_ten_proposed_items_are_visible_before_plan_approval(self):
+        plan = self.plan()
+        plan["tasks"] = [dict(plan["tasks"][0], id="T" + str(i), title="Increment " + str(i),
+                              depends_on=["T" + str(i - 1)] if i > 1 else []) for i in range(1, 11)]
+        for tid in ["analysis", "design", "architecture"]:
+            complete_fixture(self.store, tid)
+        complete_fixture(self.store, "plan", plan=plan, approve=False)
+        progress = self.store.snapshot()["development"]
+        self.assertEqual(progress["total"], 10)
+        self.assertEqual(progress["counts"]["awaiting_plan"], 10)
+        self.assertTrue(all(row["task_id"] is None for row in progress["items"]))
+        self.assertFalse(any(task["stage"] == "build" for task in self.store.tasks()))
+        write_json(self.store.latest_directory("plan") / "plan.json", self.plan())
+        self.assertEqual(self.store.snapshot()["development"]["total"], 10)
+
+    def test_task_counts_criteria_and_step_progress_follow_real_state(self):
+        plan = self.plan()
+        plan["tasks"].append(dict(plan["tasks"][0], id="T2", depends_on=["T1"]))
+        prepare_plan(self.store, plan)
+        progress = self.store.snapshot()["development"]
+        self.assertEqual(progress["counts"]["ready"], 1)
+        self.assertEqual(progress["counts"]["waiting"], 1)
+        aid, _ = self.store.begin("T1", "work")
+        self.store.step_progress(aid, [{"step": "S1 Inputs", "status": "completed"}, {"step": "S2 Implement", "status": "in_progress"}])
+        item = self.store.snapshot()["development"]["items"][0]
+        self.assertEqual(item["current_step"]["id"], "S2")
+        self.assertEqual(item["criteria_passed"], 0)
+        self.store.update("T1", status="blocked")
+        self.store.reopen("T1", "Repeat interrupted fixture")
+        complete_fixture(self.store, "T1")
+        progress = self.store.snapshot()["development"]
+        self.assertEqual(progress["completed"], 1)
+        self.assertEqual(progress["items"][0]["criteria_passed"], 1)
+        self.assertEqual(progress["items"][1]["status"], "stale")
+        self.assertEqual(self.store.snapshot()["delivery"]["acceptance_status"], "stale")
+
+    def test_replan_proposal_does_not_borrow_old_completion(self):
+        prepare_plan(self.store)
+        complete_fixture(self.store, "T1")
+        self.store.reopen("plan", "Change increment scope")
+        complete_fixture(self.store, "plan", plan=self.plan(), approve=False)
+        item = self.store.snapshot()["development"]["items"][0]
+        self.assertEqual(item["status"], "awaiting_plan")
+        self.assertEqual(item["criteria_passed"], 0)
+        self.assertIsNone(item["task_id"])
+        self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM attempts WHERE task_id='T1'").fetchone()[0], 2)
+
+    def local_services_plan(self, command=None):
+        config = self.store.config
+        config.update(service_setup_required=True, gates=["handoff"])
+        write_json(self.store.root / "config.json", config)
+        service = {"id": "email", "provider": "Email service", "purpose": "Reminder emails", "environment": "Fixture account",
+                   "inputs": ["Secure credential reference"], "permissions": ["Project configuration"],
+                   "configuration": "Configure the selected project after plan review", "verification": "Observed connection check",
+                   "checks": [command or [sys.executable, "-c", "print('synthetic service check')"]],
+                   "owner": "Owner", "cost": "No purchase in this fixture", "fallback": "Continue unrelated work"}
+        plan = self.plan()
+        plan["tasks"][0]["services"] = []
+        plan["tasks"].append(dict(plan["tasks"][0], id="T2", title="Email increment", services=["email"]))
+        plan.update(service_ids=["email"], delivery={"mode": "local", "access": "Local product", "instructions": "Open local product",
+                                                   "run_commands": [], "deferred": ["VPS and external release"]})
+        for tid in ["analysis", "design"]:
+            complete_fixture(self.store, tid)
+        complete_fixture(self.store, "architecture", services=[service])
+        self.assertFalse(any(task["stage"] == "setup" for task in self.store.tasks()))
+        complete_fixture(self.store, "plan", plan=plan)
+        return plan
+
+    def test_service_configuration_starts_after_design_plan_and_only_blocks_dependents(self):
+        self.local_services_plan()
+        self.assertEqual(self.store.task("setup-email")["deps"], ["plan"])
+        self.assertEqual(self.store.task("T1")["deps"], ["plan"])
+        self.assertEqual(self.store.task("T2")["deps"], ["plan", "setup-email"])
+        complete_fixture(self.store, "setup-email", readiness={"services": [{"id": "email", "status": "needs_input",
+                         "note": "Owner must supply the secure reference", "input_refs": ["Credential reference"]}]}, blocker="Missing configuration")
+        state = self.store.snapshot()
+        self.assertEqual(state["services"][0]["status"], "needs_input")
+        self.assertEqual(state["development"]["counts"]["ready"], 1)
+        self.assertEqual(state["development"]["counts"]["waiting"], 1)
+        self.assertEqual(self.store.next_task()["id"], "T1")
+        self.assertTrue(self.store.current_evidence("setup-email"))
+
+    def test_worker_ready_claim_requires_actual_successful_service_check(self):
+        self.local_services_plan([sys.executable, "-c", "raise SystemExit(4)"])
+        with self.assertRaises(WorkflowError):
+            complete_fixture(self.store, "setup-email")
+        self.assertNotEqual(self.store.snapshot()["services"][0]["status"], "ready")
+        self.assertNotEqual(self.store.task("setup-email")["status"], "done")
+        self.assertEqual(self.store.snapshot()["development"]["items"][1]["service_status"], "pending")
+
+    def test_service_readiness_is_reset_on_reopen_and_retains_evidence(self):
+        self.local_services_plan()
+        complete_fixture(self.store, "setup-email")
+        state = self.store.snapshot()
+        self.assertEqual(state["services"][0]["status"], "ready")
+        self.assertTrue(state["services"][0]["evidence"])
+        self.assertEqual(state["development"]["items"][1]["service_status"], "done")
+        records = self.store.current_evidence("setup-email")
+        self.store.reopen("setup-email", "Replace service configuration")
+        state = self.store.snapshot()
+        self.assertEqual(state["services"][0]["status"], "stale")
+        self.assertFalse(state["services"][0]["evidence"])
+        self.assertEqual(state["development"]["items"][1]["service_status"], "pending")
+        self.store.intact(records)
+
+    def test_run_continues_unrelated_work_after_service_input_blocker(self):
+        self.local_services_plan()
+        def fixture_execute(store, tid, factory):
+            if tid == "setup-email":
+                complete_fixture(store, tid, readiness={"services": [{"id": "email", "status": "needs_input", "note": "Need input", "input_refs": []}]}, blocker="Need input")
+                raise WorkflowError("Need input")
+            complete_fixture(store, tid)
+        with patch("product_cycle.runner.execute", side_effect=fixture_execute) as executor:
+            run_cycle(self.store, max_tasks=2)
+        self.assertEqual([call.args[1] for call in executor.call_args_list], ["setup-email", "T1"])
+        self.assertEqual(self.store.task("T1")["status"], "done")
+        self.assertEqual(self.store.task("T2")["status"], "pending")
+
+    def test_new_local_cycle_reaches_handoff_without_vps_or_remote_release(self):
+        store = Store.create(self.base / "local-product", "Local product", "Local cycle")
+        try:
+            self.assertEqual(store.config["gates"], ["handoff"])
+            self.assertEqual(store.config["delivery_mode"], "local")
+            self.assertTrue(store.config["release_deferred"])
+            while store.next_task():
+                tid = store.next_task()["id"]
+                complete_fixture(store, tid, approve=tid != "handoff")
+            self.assertEqual(store.task("handoff")["status"], "awaiting_approval")
+            self.assertEqual(store.task("verify")["status"], "done")
+            self.assertFalse(any(task["stage"] == "setup" for task in store.tasks()))
+            self.assertEqual(next(stage for stage in store.snapshot()["stages"] if stage["id"] == "setup")["status"], "not_required")
+        finally:
+            store.close()
 
 
 if __name__ == "__main__":

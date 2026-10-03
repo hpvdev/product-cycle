@@ -14,7 +14,9 @@ from .store import fingerprint, now, write_json, runner_lock
 
 def context(store, task):
     # Durable accepted artifacts are the source of truth; brief and relevant dependencies only.
-    deps = set(task["deps"]) | {"analysis", "design", "architecture", "plan"}
+    deps = set(task["deps"]) | {"analysis", "design", "architecture", "plan", "setup"}
+    if task["stage"] in {"build", "verify", "handoff"}:
+        deps |= {other["id"] for other in store.tasks() if other["stage"] == "setup"}
     packets = []
     for other in store.tasks():
         if other["id"] in deps and other["status"] == "done":
@@ -38,6 +40,10 @@ def prompt_for(store, task, directory, review=False):
     packet = context(store, task)
     packet["artifact_directory"] = str(directory)
     packet["required_files"] = FILES.get(task["stage"], [])
+    if store.config.get("service_setup_required") and task["stage"] == "architecture":
+        packet["required_files"] = packet["required_files"] + ["services.json"]
+    if task["stage"] == "setup":
+        packet["service"] = next(service for service in store.services() if "setup-" + service["id"] == task["id"])
     packet["work_steps"] = work_steps(task["stage"])
     packet["skill"] = {"name": "product-cycle-" + role, "path": str(installed_skill) if installed_skill.is_file() else None}
     if not review:
@@ -63,7 +69,7 @@ def prompt_for(store, task, directory, review=False):
 
 
 def run_checks(store, task, aid, directory):
-    commands = task["checks"] if task["stage"] == "build" else store.approved_plan().get("verification_commands", []) if task["stage"] == "verify" else []
+    commands = store.check_commands(task)
     for index, command in enumerate(commands):
         log = directory / ("check-" + str(index + 1) + ".log")
         started = time.monotonic()
@@ -98,6 +104,8 @@ def execute(store, tid, client_factory=CodexClient):
         task = store.task(tid)
         run_phase(store, task, aid, directory, False, client_factory)
         task = store.task(tid)
+        if task["status"] == "blocked":
+            raise WorkflowError(task["reason"])
         run_checks(store, task, aid, directory)
         store.update(tid, fingerprint=fingerprint(store.project))
         if task["stage"] == "verify" and store.approved_plan().get("browser_required", False) and not any(item["kind"] == "browser" for item in store.current_evidence(tid)):
@@ -177,8 +185,12 @@ def run_cycle(store, max_tasks=50, client_factory=CodexClient):
             if task is None:
                 return
             print("Đang thực hiện: " + task["title"], flush=True)
-            execute(store, task["id"], client_factory)
+            try:
+                execute(store, task["id"], client_factory)
+            except WorkflowError:
+                if task["stage"] != "setup" or store.task(task["id"])["status"] != "blocked":
+                    raise
             status = store.task(task["id"])["status"]
             print("Trạng thái: " + status, flush=True)
-            if status in {"awaiting_approval", "blocked"}:
+            if status == "awaiting_approval" or status == "blocked" and task["stage"] != "setup":
                 return

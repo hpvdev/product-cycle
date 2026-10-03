@@ -1,6 +1,6 @@
 # Product Cycle
 
-Bộ quy trình phát triển sản phẩm bằng Codex: **phân tích → UX/UI → kỹ thuật → kế hoạch → phát triển → nghiệm thu → bàn giao → retro**. Có trạng thái, model/effort, review độc lập, bằng chứng và dashboard.
+Bộ quy trình phát triển sản phẩm bằng Codex: **phân tích → UX/UI → kỹ thuật → kế hoạch → cấu hình dịch vụ cần thiết → phát triển → nghiệm thu → bàn giao → retro**. Có trạng thái, model/effort, review độc lập, bằng chứng và dashboard.
 
 Gói độc lập dựa trên [tài liệu OpenAI](docs/SOURCES.md). Không dùng Symphony. Phiên bản đầu chạy tuần tự và giữ lịch sử; áp dụng được cho repository mới hoặc đang có.
 
@@ -25,10 +25,10 @@ python3 -m product_cycle serve --project /absolute/product
 python3 -m product_cycle run --project /absolute/product
 ```
 
-Ba gate mặc định: chốt phân tích, duyệt thực thi, chấp nhận bàn giao. Xem đầu ra/bằng chứng rồi quyết định trên dashboard. Chưa phát triển trước khi kế hoạch được chấp nhận. UI acceptance có thể cần operator nếu app-server thiếu browser.
+Dự án mới phát triển và bàn giao local, có review độc lập từng giai đoạn và điểm quyết định của chủ sản phẩm tại handoff. Thiết kế kỹ thuật nêu dịch vụ cần dùng và thông tin cần cấp; sau khi plan được review, controller tạo việc cấu hình và chỉ chặn các đầu việc phụ thuộc. VPS và phát hành ra ngoài để sau. Dự án cũ giữ nguyên cấu hình. UI acceptance có thể cần operator nếu app-server thiếu browser.
 
 ```sh
-python3 -m product_cycle decide --project /absolute/product --task analysis --action approve --actor "Chủ sản phẩm" --note "Chấp nhận mục tiêu và phạm vi"
+python3 -m product_cycle decide --project /absolute/product --task handoff --action approve --actor "Chủ sản phẩm" --note "Chấp nhận bản local và kết quả kiểm chứng"
 python3 -m product_cycle run --project /absolute/product
 ```
 
@@ -50,11 +50,11 @@ Hai lệnh đầu dùng tình huống tổng hợp/adapter giả lập, không g
 - Codex adapter: phiên work/review riêng, model/effort thực tế, trace, lỗi, timeout, token khi có.
 - Hợp đồng từng vai trò, skill tái sử dụng, installer cho project được chọn.
 - Lệnh kiểm tra thật, bằng chứng có hash/nguồn/phiên bản, manifest bàn giao.
-- Dashboard: công việc, phụ thuộc, tiêu chí, đầu ra, review, model, lịch sử.
+- Dashboard: đủ đầu việc trong plan ngay khi có đầu ra, trạng thái/bước hiện tại, tiêu chí đạt, bằng chứng, cấu hình dịch vụ và nghiệm thu toàn sản phẩm riêng biệt.
 - Eval cơ chế và Jev adapter cho nhận định ngữ nghĩa tùy chọn.
 
 ## Giới hạn
 
-V0.1 chạy tuần tự; không tự merge/deploy/thông báo bên ngoài/theo dõi production. Không tự mở browser để nghiệm thu, đổi model khi thất bại hoặc áp dụng đề xuất retro. Lệnh kiểm tra chạy cục bộ ngoài sandbox Codex, nên cần lệnh tin cậy đã duyệt. Chất lượng sản phẩm được kiểm chứng khi áp dụng dự án thật.
+V0.2 chạy tuần tự; không tự merge/deploy/thông báo bên ngoài/theo dõi production. Không tự mở browser để nghiệm thu, đổi model khi thất bại hoặc áp dụng đề xuất retro. Lệnh kiểm tra chạy cục bộ ngoài sandbox Codex, nên cần lệnh tin cậy thuộc phạm vi đã cấp phép và được review. Chất lượng sản phẩm được kiểm chứng khi áp dụng dự án thật.
 
 Đọc [quy trình](docs/WORKFLOW.md), [kiến trúc](docs/ARCHITECTURE.md), [vận hành](docs/RUNBOOK.md), [đánh giá](evals/README.md).

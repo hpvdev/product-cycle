@@ -23,9 +23,9 @@ Python 3.9+, thư viện chuẩn, SQLite WAL, HTTP cục bộ. Codex dùng đăn
 
 Không sửa cấu hình Codex toàn cục. Mỗi phiên truyền model, effort, cwd, policy, sandbox. Model/effort app-server trả lại và sự kiện rerouting được ghi riêng với cấu hình yêu cầu. Token chưa có số liệu không phải 0; ngân sách token phụ thuộc sự kiện có thể đến trễ. Timeout và số lần thử được giới hạn ở controller.
 
-Lock OS ngăn hai controller đồng thời. V0.1 chạy tuần tự dù backlog hỗ trợ DAG; không tự tạo worktree. Review dùng phiên mới read-only. Crash: recover → kiểm tra thay đổi → reopen, không tự lặp thao tác chưa rõ kết quả.
+Lock OS ngăn hai controller đồng thời. Controller chạy tuần tự dù backlog hỗ trợ DAG; không tự tạo worktree. Review dùng phiên mới read-only. Crash: recover → kiểm tra thay đổi → reopen, không tự lặp thao tác chưa rõ kết quả.
 
-Lệnh kiểm tra là argv đã duyệt trong plan; controller chạy cục bộ ngoài sandbox Codex. Dùng lệnh tin cậy của repository được chọn. Không publish/deploy/merge là policy trong hướng dẫn và không có endpoint triển khai; gói không phải môi trường cách ly tuyệt đối cho code không tin cậy.
+Lệnh kiểm tra là argv đã duyệt trong plan; kiểm tra kết nối dịch vụ được khai báo trong thiết kế kỹ thuật và liên kết qua plan; controller chạy cục bộ ngoài sandbox Codex. Dùng lệnh tin cậy của repository được chọn. Không publish/deploy/merge là policy trong hướng dẫn và không có endpoint triển khai; gói không phải môi trường cách ly tuyệt đối cho code không tin cậy.
 
 Dashboard bind 127.0.0.1, kiểm tra Host, token và same-origin cho thao tác thay đổi. Chỉ phục vụ bằng chứng đã đăng ký và đúng hash. HTML/SVG hiển thị như văn bản, không chạy trong dashboard.
 

@@ -12,7 +12,8 @@ import uuid
 from pathlib import Path
 
 from .contracts import (CRITERIA, FILES, STAGE_TITLES, WorkflowError, defaults,
-                        json_object, require, validate_plan, validate_requirements, work_steps)
+                        json_object, require, validate_plan, validate_requirements, work_steps,
+                        validate_services, validate_local_plan)
 
 
 def now():
@@ -94,6 +95,8 @@ class Store:
         (root / "brief.md").write_text(brief.rstrip() + "\n")
         config = defaults(model, effort)
         config.update({"name": name, "mode": mode, "created_at": now()})
+        if mode == "demo":
+            config.update(service_setup_required=False, gates=["analysis", "design", "plan", "handoff"])
         write_json(root / "config.json", config)
         with sqlite3.connect(str(root / "state.sqlite3")) as db:
             db.executescript("""
@@ -133,11 +136,13 @@ class Store:
             """)
         store = cls(project)
         previous = []
-        for stage in ["analysis", "design", "architecture", "plan", "verify", "handoff", "retro"]:
+        stages = ["analysis", "design", "architecture", "plan"]
+        stages += ["verify", "handoff", "retro"]
+        for stage in stages:
             store.add_task(stage, stage, STAGE_TITLES[stage], "Complete the " + stage + " contract.",
                            previous, CRITERIA[stage], [], [])
             previous = [stage]
-        store.event(None, "cycle.created", {"name": name, "mode": mode, "workflow_version": "0.1.0"})
+        store.event(None, "cycle.created", {"name": name, "mode": mode, "workflow_version": config["workflow_version"]})
         return store
 
     def close(self):
@@ -315,7 +320,7 @@ class Store:
         task = self.task(tid)
         require(isinstance(result, dict) and isinstance(result.get("summary"), str) and result["summary"].strip(), "Kết quả cần có tóm tắt.")
         require(isinstance(result.get("artifacts"), list) and result["artifacts"], "Kết quả cần có đầu ra thực tế.")
-        require(result.get("blocker") is None, "Công việc cần xử lý vấn đề đang chặn trước khi hoàn tất.")
+        require(result.get("blocker") is None or task["stage"] == "setup", "Công việc cần xử lý vấn đề đang chặn trước khi hoàn tất.")
         require(isinstance(result.get("limitations"), list), "Kết quả cần khai báo giới hạn.")
         directory = self.latest_directory(tid)
         paths = []
@@ -340,6 +345,8 @@ class Store:
                         "Mỗi bước nhỏ cần kết quả và đầu ra có thể kiểm chứng.")
         # Existing sealed results keep their original contract until reopened.
         filenames = FILES.get(task["stage"], [])
+        if self.config.get("service_setup_required") and task["stage"] == "architecture":
+            filenames = filenames + ["services.json"]
         if task["stage"] == "design" and not tracking and steps is None:
             filenames = ["design.md"]
         for filename in filenames:
@@ -358,7 +365,14 @@ class Store:
         if task["stage"] == "analysis":
             validate_requirements(json_object(directory / "requirements.json"))
         if task["stage"] == "plan":
-            validate_plan(json_object(directory / "plan.json"), self.requirement_ids())
+            plan = json_object(directory / "plan.json")
+            validate_plan(plan, self.requirement_ids())
+            if self.config.get("service_setup_required"):
+                validate_local_plan(plan, self.services())
+        if task["stage"] == "architecture" and self.config.get("service_setup_required"):
+            validate_services(json_object(directory / "services.json"))
+        if task["stage"] == "setup":
+            self.validate_readiness(tid, json_object(directory / "readiness.json"), blocked=bool(result.get("blocker")))
         if task["stage"] == "retro":
             retro = json_object(directory / "retro.json")
             require(isinstance(retro.get("observations"), list) and isinstance(retro.get("improvements"), list), "Retro cần quan sát và đề xuất cải thiện.")
@@ -389,13 +403,42 @@ class Store:
                 return json_object(self.root / item["object_path"])
         raise WorkflowError("Thiếu kế hoạch đã chốt.")
 
+    def sealed_document(self, tid, filename):
+        records = self.current_evidence(tid)
+        self.intact(records)
+        for item in records:
+            if Path(item["source"]).name == filename and item["kind"] == "artifact":
+                return json_object(self.root / item["object_path"])
+        raise WorkflowError("Thiếu tài liệu đã ghi nhận: " + filename)
+
+    def services(self):
+        require(self.task("architecture")["status"] == "done", "Thiết kế kỹ thuật chưa hoàn tất.")
+        return validate_services(self.sealed_document("architecture", "services.json"))
+
+    def validate_readiness(self, tid, value, blocked=False):
+        services = [service for service in self.services() if "setup-" + service["id"] == tid]
+        require(services, "Không tìm thấy dịch vụ được giao cấu hình.")
+        rows = value.get("services")
+        require(isinstance(rows, list) and len(rows) == len(services) and
+                all(isinstance(row, dict) and isinstance(row.get("id"), str) for row in rows) and
+                {row["id"] for row in rows} == {service["id"] for service in services},
+                "Cấu hình cần bao phủ toàn bộ dịch vụ đã thiết kế.")
+        for row in rows:
+            require(row.get("status") in {"needs_input", "configuring", "ready", "failed"} and
+                    isinstance(row.get("note"), str) and row["note"].strip(), "Dịch vụ cần trạng thái và hướng xử lý rõ ràng.")
+            require(isinstance(row.get("input_refs"), list) and all(isinstance(ref, str) for ref in row["input_refs"]),
+                    "Chỉ ghi tên hoặc tham chiếu cấu hình, không ghi giá trị bí mật.")
+        require(blocked or all(row["status"] == "ready" for row in rows), "Dịch vụ chưa sẵn sàng; bổ sung cấu hình rồi kiểm tra lại.")
+
     def work_finished(self, tid, aid, result):
         task = self.task(tid)
         self.validate_outputs(tid, result)
         for item in result["artifacts"]:
             self.record_file(tid, item["path"], item["purpose"], item["criteria"], item["requirements"], attempt_id=aid)
         self.attempt_update(aid, status="completed", ended_at=now())
-        self.update(tid, result=result, status="reviewing", fingerprint=fingerprint(self.project))
+        blocked = bool(result.get("blocker"))
+        self.update(tid, result=result, status="blocked" if blocked else "reviewing",
+                    reason=result.get("blocker"), fingerprint=fingerprint(self.project))
         self.event(tid, "work.completed", {"summary": result["summary"], "revision": task["revision"]})
 
     def validate_review(self, tid, review):
@@ -405,6 +448,7 @@ class Store:
                 isinstance(review.get("findings"), list), "Review cần nhận xét rõ ràng.")
         if review["decision"] != "approve":
             return
+        require(not task["result"].get("blocker"), "Cần giải quyết phần cấu hình còn thiếu trước khi duyệt.")
         records = self.current_evidence(tid)
         self.intact(records)
         evidence_ids = {item["id"] for item in records}
@@ -429,7 +473,7 @@ class Store:
                 require(any(item["id"] in step["evidence"] and item["source"] in results[step["id"]]["artifacts"]
                             for item in records), "Bằng chứng review chưa đối chiếu đúng đầu ra của bước nhỏ.")
         checks = [item for item in records if item["kind"] == "check"]
-        required_checks = task["checks"] if task["stage"] == "build" else self.approved_plan().get("verification_commands", []) if task["stage"] == "verify" else []
+        required_checks = self.check_commands(task)
         for command in required_checks:
             matching = [json_object(self.root / item["object_path"]) for item in checks]
             require(any(item.get("argv") == command and item.get("exit_code") == 0 and
@@ -439,6 +483,19 @@ class Store:
             browser_records = [json_object(self.root / item["object_path"]) for item in records if item["kind"] == "browser" and item["producer"] == "operator"]
             covered = {rid for item in browser_records if item.get("source_fingerprint") == task["fingerprint"] for rid in item.get("requirements", [])}
             require(covered >= self.requirement_ids(), "Cần kiểm chứng trình duyệt thực tế, bao phủ yêu cầu, cho phiên bản hiện tại.")
+        if task["stage"] == "handoff" and self.config.get("service_setup_required"):
+            verify = self.task("verify")
+            require(verify["status"] == "done", "Chưa kiểm chứng bản local.")
+            self.validate_outputs("verify", verify["result"])
+            self.validate_review("verify", verify["review"])
+
+    def check_commands(self, task):
+        if task["stage"] in {"build", "setup"}:
+            return task["checks"]
+        if task["stage"] == "verify":
+            plan = self.approved_plan()
+            return plan.get("verification_commands", [])
+        return []
 
     def review_finished(self, tid, aid, review):
         self.validate_review(tid, review)
@@ -461,18 +518,26 @@ class Store:
         if task["stage"] == "plan":
             plan = json_object(self.latest_directory(tid) / "plan.json")
             tasks = validate_plan(plan, self.requirement_ids())
+            services = self.services() if self.config.get("service_setup_required") else []
+            if self.config.get("service_setup_required"):
+                validate_local_plan(plan, services)
+            setup_tasks = [{"id": "setup-" + service["id"], "stage": "setup",
+                            "title": "Cấu hình " + service["provider"], "instructions": service["configuration"],
+                            "depends_on": [], "requirements": [], "criteria": CRITERIA["setup"],
+                            "checks": service["checks"]} for service in services]
             # Avoid partial expansion: all inserts and dependencies commit together.
             with self.db:
-                self.db.execute("UPDATE tasks SET status='superseded' WHERE stage='build'")
-                for item in tasks:
+                self.db.execute("UPDATE tasks SET status='superseded' WHERE stage IN ('build','setup')")
+                for item in setup_tasks + tasks:
+                    deps = ["plan"] + item["depends_on"] + ["setup-" + sid for sid in item.get("services", [])]
                     existing = self.db.execute("SELECT id FROM tasks WHERE id=?", (item["id"],)).fetchone()
                     if existing:
                         self.db.execute("UPDATE tasks SET title=?,instructions=?,deps=?,criteria=?,requirements=?,checks=?,status='pending' WHERE id=?",
-                                        (item["title"], item["instructions"], json.dumps(["plan"] + item["depends_on"]), json.dumps(item["criteria"]),
+                                        (item["title"], item["instructions"], json.dumps(deps), json.dumps(item["criteria"]),
                                          json.dumps(item["requirements"]), json.dumps(item.get("checks", [])), item["id"]))
                     else:
                         self.db.execute("INSERT INTO tasks(id,stage,title,instructions,deps,criteria,requirements,checks,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                                    (item["id"], "build", item["title"], item["instructions"], json.dumps(["plan"] + item["depends_on"]),
+                                    (item["id"], item.get("stage", "build"), item["title"], item["instructions"], json.dumps(deps),
                                      json.dumps(item["criteria"]), json.dumps(item["requirements"]), json.dumps(item.get("checks", [])), "pending", now()))
                 self.db.execute("UPDATE tasks SET deps=? WHERE id='verify'", (json.dumps([item["id"] for item in tasks]),))
             config = self.config
@@ -529,7 +594,7 @@ class Store:
         return recovered
 
     def snapshot(self, full_history=False):
-        from .progress import task_progress, stage_progress
+        from .progress import task_progress, stage_progress, development_progress, service_progress
         tasks = self.tasks()
         config = self.config
         progress_events = [dict(row) for row in self.db.execute("SELECT task_id,type,data,created_at FROM events WHERE type IN ('steps.started','step.progress') ORDER BY id")]
@@ -552,9 +617,33 @@ class Store:
         events = [dict(row) for row in self.db.execute("SELECT * FROM events ORDER BY id DESC" + ("" if full_history else " LIMIT 250"))]
         for event in events:
             event["data"] = json.loads(event["data"])
+        plan_task = next(task for task in tasks if task["id"] == "plan")
+        plan = None
+        if plan_task["result"]:
+            record = next((item for item in self.current_evidence("plan") if Path(item["source"]).name == "plan.json"), None)
+            if record:
+                self.intact([record])
+                plan = json_object(self.root / record["object_path"])
+        architecture = next(task for task in tasks if task["id"] == "architecture")
+        services = []
+        if architecture["result"]:
+            record = next((item for item in self.current_evidence("architecture") if Path(item["source"]).name == "services.json"), None)
+            if record:
+                self.intact([record])
+                services = validate_services(json_object(self.root / record["object_path"]))
+        readiness = {task["id"]: self.sealed_document(task["id"], "readiness.json")
+                     for task in tasks if task["stage"] == "setup" and task["result"] and task["status"] != "superseded"}
+        cycle_state = self.db.execute("SELECT value FROM meta WHERE key='state'").fetchone()[0]
         return {"config": config, "project": str(self.project),
-                "state": self.db.execute("SELECT value FROM meta WHERE key='state'").fetchone()[0],
+                "state": cycle_state,
                 "tasks": tasks, "stages": stage_progress(tasks, config), "events": events,
+                "development": development_progress(tasks, plan, cycle_state),
+                "services": service_progress(services, tasks, readiness, architecture["status"]),
+                "delivery": {"mode": config.get("delivery_mode", "local"),
+                             "plan": plan.get("delivery") if plan else None,
+                             "verification_status": self.task("verify")["status"],
+                             "acceptance_status": self.task("handoff")["status"],
+                             "release_deferred": config.get("release_deferred", True)},
                 "tokens": self.db.execute("SELECT SUM(tokens) FROM attempts").fetchone()[0],
                 "decisions": decisions}
 

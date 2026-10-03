@@ -4,24 +4,27 @@ Phát triển từng phần sản phẩm sử dụng được, truy vết từ y
 
 ```mermaid
 flowchart LR
- A[Phân tích] --> G1{Chốt mục tiêu}
- G1 --> D[UX/UI]
- D --> T[Kỹ thuật]
+ A[Phân tích] --> D[UX/UI]
+ D --> T[Kỹ thuật và nhu cầu dịch vụ]
  T --> P[Kế hoạch]
- P --> G2{Duyệt thực thi}
- G2 --> B[Phát triển theo phụ thuộc]
- B --> R[Review độc lập]
- R --> V[Nghiệm thu]
- V --> H[Bàn giao]
- H --> G3{Chấp nhận kết quả}
- G3 --> E[Retro và gói bằng chứng]
+ P --> B[Phát triển local theo phụ thuộc]
+ P --> S[Cấu hình dịch vụ theo thiết kế]
+ S -->|Chỉ các việc phụ thuộc| B
+ S -->|Thiếu thông tin| U[Chủ sản phẩm cấp cấu hình]
+ U --> S
+ B --> R[Review và kiểm tra từng đầu việc]
  R -->|Cần sửa| B
- E --> N[Vòng tiếp theo theo yêu cầu]
+ R --> V[Kiểm chứng toàn sản phẩm local]
+ V --> H[Bàn giao local]
+ H --> G{Chủ sản phẩm nghiệm thu}
+ G --> E[Retro và gói bằng chứng]
 ```
 
-Mọi công việc có phiên thực hiện và review riêng. Sơ đồ nhấn mạnh review phát triển để dễ đọc. Chủ sản phẩm quyết định các gate; AI tiếp tục trong phạm vi đã chấp nhận.
+Mọi công việc có phiên thực hiện và review riêng. Sơ đồ nhấn mạnh review phát triển để dễ đọc. Dự án mới chỉ có quyết định chủ sản phẩm tại handoff; mỗi bước trước đó vẫn cần review độc lập. Cấu hình thật chỉ bắt đầu sau khi phân tích, thiết kế và plan đã hoàn tất review. Thiếu một dịch vụ không chặn các việc không phụ thuộc. VPS và phát hành ra ngoài được ghi là để sau, không phải điều kiện hoàn tất bản local. Dự án cũ giữ gate riêng.
 
 ## Kết quả và truy vết
+
+Phân tích và thiết kế đủ cho phiên bản đầu hoặc đợt phát triển hiện tại; không chờ mô tả hoàn hảo toàn bộ sản phẩm. Chia việc thành các phần chạy được từ giao diện tới dữ liệu, kiểm tra từng phần và cập nhật kế hoạch khi có bằng chứng mới. Nếu thay đổi ảnh hưởng thiết kế hoặc dịch vụ, mở lại bước liên quan để review lại trước khi thực thi phụ thuộc.
 
 Quy mô đầu ra phù hợp độ khó. Thay đổi nhỏ có thể có thiết kế ngắn và một kiểm tra tập trung. Vấn đề thay đổi mục tiêu, dữ liệu quan trọng hoặc trải nghiệm phải được ghi nhận, không suy đoán rồi coi là dữ kiện.
 
@@ -41,4 +44,10 @@ Nghiệm thu UI dùng quan sát trình duyệt thật do operator ghi nhận: �
 
 ## Cải thiện
 
-Retro giữ quan sát và đề xuất. Cải thiện cần bằng chứng cùng input/expected cho eval. Không tự thay quy trình đang chạy. Phản hồi sau sử dụng được đưa vào brief vòng sau khi có dữ liệu; v0.1 chưa tự theo dõi production.
+Retro giữ quan sát và đề xuất. Cải thiện cần bằng chứng cùng input/expected cho eval. Không tự thay quy trình đang chạy. Phản hồi sau sử dụng được đưa vào brief vòng sau khi có dữ liệu; gói chưa tự theo dõi production.
+
+## Theo dõi đầu việc và dịch vụ
+
+Plan có bao nhiêu đầu việc, dashboard hiển thị đủ bấy nhiêu từ lúc có đầu ra dự kiến. Trạng thái thực thi chỉ bắt đầu khi plan được review/chấp nhận theo cấu hình. Mỗi dòng cho xem bước hiện tại, phụ thuộc chưa xong, tiêu chí đã đạt và bằng chứng. Đã kiểm chứng đầu việc không đồng nghĩa chủ sản phẩm đã nghiệm thu toàn sản phẩm.
+
+Thiết kế kỹ thuật tạo services.json: mục đích, môi trường/tài khoản, quyền, tên thông tin cần cấp, cách cấu hình, kiểm tra, người cung cấp, chi phí và phương án xử lý. Readiness từ worker là báo cáo; trạng thái sẵn sàng chỉ được xác nhận sau kiểm tra kết nối của controller và review. Không lưu giá trị bí mật trên dashboard.

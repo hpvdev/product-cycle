@@ -4,14 +4,16 @@ import json
 from pathlib import Path
 
 RESOURCES = Path(__file__).parent / "resources"
-STAGES = ["analysis", "design", "architecture", "plan", "build", "verify", "handoff", "retro"]
+STAGES = ["analysis", "design", "architecture", "plan", "setup", "build", "verify", "handoff", "retro"]
 STAGE_TITLES = {
+    "setup": "Cấu hình dịch vụ",
     "analysis": "Phân tích sản phẩm", "design": "Thiết kế UX/UI",
     "architecture": "Thiết kế kỹ thuật", "plan": "Lập kế hoạch",
     "build": "Phát triển", "verify": "Nghiệm thu", "handoff": "Bàn giao",
     "retro": "Cải thiện quy trình",
 }
 FILES = {
+    "setup": ["readiness.json", "setup.md"],
     "analysis": ["analysis.md", "requirements.json"],
     "design": ["design.md", "design-baseline.json"], "architecture": ["architecture.md"],
     "plan": ["plan.json"], "verify": ["acceptance.md"],
@@ -20,6 +22,13 @@ FILES = {
 
 # Local task IDs remain stable across retries; progress is scoped to each attempt.
 WORK_STEPS = {
+    "setup": [
+        ("Đọc nhu cầu tích hợp", "Xác định dịch vụ, mục đích và tính năng phụ thuộc theo thiết kế."),
+        ("Kiểm tra tài khoản và quyền", "Xác định tài khoản được phép dùng và những thông tin cần bạn cấp."),
+        ("Cấu hình các dịch vụ cần thiết", "Thiết lập trong phạm vi đã được cấp phép; ghi rõ phần còn thiếu."),
+        ("Kiểm tra kết nối thực tế", "Chạy kiểm tra phù hợp để xác nhận quyền và kết nối tới dịch vụ."),
+        ("Ghi nhận cấu hình sẵn sàng", "Lưu kết quả kiểm tra, giới hạn và cách xử lý khi thiếu cấu hình; không lưu bí mật."),
+    ],
     "analysis": [
         ("Xác định người dùng và mục tiêu", "Nêu ai sử dụng sản phẩm và kết quả họ cần đạt."),
         ("Làm rõ vấn đề", "Mô tả tình huống sử dụng, khó khăn và nhu cầu chính."),
@@ -37,7 +46,7 @@ WORK_STEPS = {
     "architecture": [
         ("Đọc cấu trúc hiện có", "Xác định phần code và quy tắc liên quan; dùng lại thành phần phù hợp."),
         ("Thiết kế dữ liệu và giao tiếp", "Mô tả dữ liệu, ranh giới thành phần và hợp đồng giao tiếp."),
-        ("Chọn cách triển khai", "Ghi lựa chọn phù hợp phạm vi và lý do đánh đổi."),
+        ("Chọn dịch vụ và cách tích hợp", "Nêu dịch vụ cần dùng, lý do, quyền, cấu hình cần bạn cấp và cách kiểm tra."),
         ("Xử lý điểm chưa chắc", "Kiểm chứng phần kỹ thuật có rủi ro hoặc ghi rõ điều còn bị chặn."),
         ("Xác định cách kiểm tra và khôi phục", "Nêu cách chứng minh tính đúng và khôi phục khi cần."),
     ],
@@ -46,7 +55,7 @@ WORK_STEPS = {
         ("Sắp xếp phụ thuộc", "Xác định thứ tự thực hiện, tránh vòng lặp phụ thuộc."),
         ("Viết hợp đồng công việc", "Ghi đầu vào, phạm vi, yêu cầu liên quan và tiêu chí hoàn tất."),
         ("Chọn cách kiểm chứng", "Dùng kiểm tra phù hợp và kiểm chứng trình duyệt khi trải nghiệm yêu cầu."),
-        ("Xác định giới hạn thực thi", "Ghi khả năng công cụ, số lần thử và điều kiện dừng."),
+        ("Chốt cách chạy local và giới hạn", "Ghi cách dùng bản local, giới hạn thực thi và phần phát hành để giai đoạn sau."),
     ],
     "build": [
         ("Đọc đầu vào và tái hiện", "Đọc yêu cầu, mốc thiết kế và code liên quan; tái hiện lỗi nếu đang sửa bug."),
@@ -63,7 +72,7 @@ WORK_STEPS = {
     ],
     "handoff": [
         ("Xác định phiên bản bàn giao", "Liên kết bản bàn giao với đúng phiên bản đã nghiệm thu."),
-        ("Viết hướng dẫn chạy và sử dụng", "Ghi cách thiết lập và thao tác để người nhận sử dụng được."),
+        ("Giao bản local để dùng thử", "Ghi cách mở web hoặc chạy app ở môi trường hiện tại cùng tài khoản thử nếu cần."),
         ("Tập hợp đầu ra và bằng chứng", "Liên kết tài liệu, source và kết quả kiểm chứng."),
         ("Ghi cách khôi phục", "Nêu phương án khôi phục phù hợp với cách bàn giao."),
         ("Chốt hạn chế và việc tiếp theo", "Ghi rõ những phần chưa thực hiện hoặc chưa kiểm chứng."),
@@ -82,6 +91,8 @@ def work_steps(stage):
     return [{"id": "S" + str(i + 1), "title": title, "description": description}
             for i, (title, description) in enumerate(WORK_STEPS[stage])]
 CRITERIA = {
+    "setup": ["Dịch vụ, tài khoản và phạm vi được phép cấu hình đã rõ",
+              "Cấu hình có kiểm tra kết nối thực tế thành công"],
     "analysis": ["Người dùng, vấn đề, kết quả mong muốn và phạm vi rõ ràng",
                  "Dữ kiện, giả định, điều chưa biết được phân biệt; yêu cầu có tiêu chí nghiệm thu"],
     "design": ["Luồng chính và các trạng thái trống, lỗi, tải được thiết kế",
@@ -101,17 +112,18 @@ CRITERIA = {
 
 def defaults(model=None, effort=None):
     return {
-        "version": 1, "workflow_version": "0.1.0", "mode": "live",
+        "version": 1, "workflow_version": "0.2.0", "mode": "live",
+        "service_setup_required": True, "delivery_mode": "local", "release_deferred": True,
         "models": {stage: {
             "model": model or ("gpt-6-astra" if stage in {"analysis", "design", "architecture"} else "gpt-6.1-sol"),
             "effort": effort or ("high" if stage == "review" else "medium"),
         } for stage in STAGES + ["review"]},
-        "gates": ["analysis", "design", "plan", "handoff"],
+        "gates": ["handoff"],
         "max_attempts": 2, "turn_timeout_seconds": 900,
         "max_turn_tokens": 400000, "max_cycle_tokens": 2000000,
         "network_access": True, "verification_commands": [],
         "browser_required": False, "allowed_tools": [],
-        "external_actions": "No publishing, deployment, messages, merges, account changes, or destructive operations unless separately authorized.",
+        "external_actions": "Configure only the third-party services required by the design within the user's authorized accounts and project. Do not infer authorization from a logged-in account. Develop and verify locally. VPS provisioning, deployment and external publication are deferred. No messages, paid purchases, unrelated account changes or destructive operations unless explicitly authorized.",
     }
 
 
@@ -219,3 +231,45 @@ def validate_plan(value, requirement_ids):
     validate_commands(value.get("verification_commands", []))
     require(isinstance(value.get("browser_required", False), bool), "browser_required phải là boolean.")
     return tasks
+
+
+def validate_services(value):
+    services = value.get("services")
+    require(isinstance(services, list), "Thiết kế cần danh sách dịch vụ, kể cả khi không dùng bên thứ ba.")
+    ids = set()
+    for service in services:
+        require(isinstance(service, dict), "Thông tin dịch vụ chưa hợp lệ.")
+        for key in ["id", "provider", "purpose", "environment", "configuration", "verification", "owner", "cost", "fallback"]:
+            require(isinstance(service.get(key), str) and service[key].strip(), "Dịch vụ cần mô tả " + key)
+        require(service["id"].replace("-", "").isalnum() and service["id"] not in ids, "Dịch vụ cần mã riêng biệt, gồm chữ, số hoặc dấu gạch ngang.")
+        ids.add(service["id"])
+        for key in ["inputs", "permissions"]:
+            require(isinstance(service.get(key), list) and all(isinstance(x, str) and x.strip() for x in service[key]),
+                    "Dịch vụ cần danh sách " + key)
+        validate_commands(service.get("checks", []))
+        require(service.get("checks"), "Dịch vụ cần lệnh kiểm tra kết nối hoặc quyền thực tế.")
+    return services
+
+
+def validate_local_plan(plan, services):
+    """Configuration dependencies are scoped to the increments that need them."""
+    known = {service["id"] for service in services}
+    service_ids = plan.get("service_ids")
+    require(isinstance(service_ids, list) and all(isinstance(sid, str) for sid in service_ids) and
+            len(service_ids) == len(known) and set(service_ids) == known,
+            "Plan cần bao phủ các dịch vụ của thiết kế kỹ thuật.")
+    used = set()
+    for task in plan["tasks"]:
+        needed = task.get("services")
+        require(isinstance(needed, list) and all(isinstance(sid, str) and sid in known for sid in needed),
+                "Mỗi đầu việc cần ghi các dịch vụ phụ thuộc; dùng danh sách rỗng nếu không cần dịch vụ.")
+        used.update(needed)
+    require(used == known, "Mỗi dịch vụ trong thiết kế cần liên kết tới công việc sử dụng nó.")
+    delivery = plan.get("delivery")
+    require(isinstance(delivery, dict) and delivery.get("mode") == "local", "Plan cần bàn giao bản local; VPS và phát hành để giai đoạn sau.")
+    for key in ["access", "instructions"]:
+        require(isinstance(delivery.get(key), str) and delivery[key].strip(), "Bản local cần " + key)
+    validate_commands(delivery.get("run_commands", []))
+    require(isinstance(delivery.get("deferred"), list) and all(isinstance(item, str) and item.strip() for item in delivery["deferred"]),
+            "Plan cần ghi rõ những việc phát hành để giai đoạn sau.")
+    return delivery

@@ -46,7 +46,7 @@ def task_progress(task, tasks, config, events, decisions, root):
     add("outputs", "Kiểm tra đầu ra", "Đối chiếu cấu trúc, file bắt buộc và liên kết bằng chứng.",
         "done" if task.get("result") else "blocked" if work and work["status"] == "failed" else base,
         refs=artifact_refs)
-    commands = task["checks"] if task["stage"] == "build" else config.get("verification_commands", []) if task["stage"] == "verify" else []
+    commands = task["checks"] if task["stage"] in {"build", "setup"} else config.get("verification_commands", []) if task["stage"] == "verify" else []
     for index, command in enumerate(commands):
         reports = []
         for item in evidence:
@@ -100,13 +100,19 @@ def stage_progress(tasks, config):
     stages = []
     for stage in STAGES:
         children = [task for task in tasks if task["stage"] == stage and task["status"] != "superseded"]
+        if stage == "setup" and not children and not config.get("service_setup_required"):
+            continue
         steps = [step for task in children for step in task["steps"]]
         if not children:
             steps = [dict(step, status="waiting", source="controller", note="", evidence=[], updated_at=None) for step in work_steps(stage)]
+            if stage == "setup" and any(task["id"] == "plan" and task["status"] == "done" for task in tasks):
+                steps = [dict(step, status="not_required", source="controller", note="Kế hoạch không cần dịch vụ bên thứ ba.", evidence=[], updated_at=None) for step in work_steps(stage)]
         counted = [step for step in steps if step["status"] != "not_required"]
         completed = sum(step["status"] == "done" for step in counted)
         status = "pending"
-        if children and all(task["status"] == "done" for task in children):
+        if stage == "setup" and not children and steps[0]["status"] == "not_required":
+            status = "not_required"
+        elif children and all(task["status"] == "done" for task in children):
             status = "done"
         else:
             for candidate in ["blocked", "rework", "awaiting_approval", "reviewing", "running", "stale"]:
@@ -119,3 +125,100 @@ def stage_progress(tasks, config):
                        "untracked": sum(step["status"] == "untracked" for step in counted),
                        "percent": round(100 * completed / len(counted)) if counted else 0})
     return stages
+
+
+def development_progress(tasks, plan, cycle_state):
+    """Expose every plan item without granting execution before plan approval."""
+    by_id = {task["id"]: task for task in tasks}
+    plan_task = by_id["plan"]
+    approved = plan_task["status"] == "done"
+    proposal = plan is not None and not approved
+    items = plan["tasks"] if plan is not None else [task for task in tasks if task["stage"] == "build" and task["status"] != "superseded"]
+    rows = []
+    for item in items:
+        task = by_id.get(item["id"]) if not proposal else None
+        deps = item.get("depends_on", []) if proposal else task["deps"] if task else item.get("depends_on", [])
+        dependency_rows = [{"id": tid, "title": by_id[tid]["title"] if tid in by_id else next((other["title"] for other in items if other["id"] == tid), tid),
+                            "status": by_id[tid]["status"] if not proposal and tid in by_id else "awaiting_plan"}
+                           for tid in deps]
+        status = "awaiting_plan" if proposal else task["status"] if task else "pending"
+        if status == "pending":
+            status = "waiting" if any(dep["status"] != "done" for dep in dependency_rows) else "ready"
+        steps = task.get("steps", []) if task else []
+        current = None
+        for candidate in ["running", "awaiting_approval", "blocked", "rework", "reported", "stale", "waiting", "pending"]:
+            current = next((step for step in steps if step["status"] == candidate), None)
+            if current:
+                break
+        if status == "done":
+            current = None
+        review = (task.get("review") or {}) if task else {}
+        evidence = {record["id"] for record in task["evidence"] if record["revision"] == task["revision"] and
+                    record["attempt_id"] and record["attempt_id"].startswith(task["id"] + ":r" + str(task["revision"]) + ":a" + str(task["attempts"]) + ":")} if task else set()
+        criteria = []
+        for index, criterion in enumerate(item["criteria"]):
+            cid = "C" + str(index + 1)
+            assessment = next((row for row in review.get("criteria", []) if row["id"] == cid), None)
+            refs = [eid for eid in assessment.get("evidence", []) if eid in evidence] if assessment else []
+            criterion_status = "done" if assessment and assessment.get("passed") is True and refs and review.get("decision") == "approve" else "rework" if assessment and assessment.get("passed") is False else "pending"
+            criteria.append({"id": cid, "description": criterion, "status": criterion_status, "evidence": refs})
+        checks = [step for step in steps if step["id"].startswith("check-")]
+        check_count = len(item.get("checks", []))
+        integration_tasks = [by_id[tid] for tid in deps if tid in by_id and by_id[tid]["stage"] == "setup"]
+        service_status = "not_required" if not item.get("services") and not integration_tasks else "done" if integration_tasks and all(t["status"] == "done" for t in integration_tasks) else "pending"
+        rows.append({"id": item["id"], "task_id": task["id"] if task else None,
+                     "title": item["title"], "instructions": item["instructions"], "status": status,
+                     "dependencies": dependency_rows, "requirements": item["requirements"],
+                     "criteria": criteria, "criteria_passed": sum(row["status"] == "done" for row in criteria),
+                     "criteria_total": len(criteria),
+                     "current_step": {key: current[key] for key in ["id", "title", "status"]} if current else None,
+                     "steps_completed": sum(step["status"] == "done" for step in steps),
+                     "steps_total": len([step for step in steps if step["status"] != "not_required"]),
+                     "checks": {"total": check_count, "passed": sum(step["status"] == "done" for step in checks),
+                                "failed": sum(step["status"] == "blocked" for step in checks)},
+                     "review_status": {"approve": "done", "rework": "rework", "blocked": "blocked"}.get(review.get("decision"),
+                                      "running" if task and task["status"] == "reviewing" else "pending"),
+                     "service_status": service_status,
+                     "reason": task.get("reason") if task else None})
+    counts = {status: sum(row["status"] == status for row in rows)
+              for status in ["awaiting_plan", "ready", "waiting", "running", "reviewing", "awaiting_approval", "done", "rework", "blocked", "stale"]}
+    active = [task for task in tasks if task["status"] != "superseded"]
+    focus = None
+    for status in ["running", "reviewing", "awaiting_approval", "blocked", "rework", "stale"]:
+        focus = next((task for task in active if task["status"] == status), None)
+        if focus:
+            break
+    if focus is None:
+        focus = next((task for task in active if task["status"] == "pending" and all(by_id[tid]["status"] == "done" for tid in task["deps"])), None)
+    current = {"task_id": focus["id"], "title": focus["title"], "status": focus["status"],
+               "step": next((step["title"] for step in focus["steps"] if step["status"] == "running"), None),
+               "reason": focus["reason"]} if focus else None
+    return {"plan_status": plan_task["status"], "plan_revision": plan_task["revision"],
+            "proposal": proposal, "items": rows, "total": len(rows), "counts": counts,
+            "completed": counts["done"], "current": current, "paused": cycle_state == "paused"}
+
+
+def service_progress(services, tasks, readiness, architecture_status):
+    """A worker's readiness claim is not a passed connectivity check."""
+    by_id = {task["id"]: task for task in tasks}
+    rows = []
+    for service in services:
+        task = by_id.get("setup-" + service["id"])
+        if task and task["status"] == "superseded":
+            task = None
+        report = readiness.get(task["id"], {}) if task else {}
+        item = next((row for row in report.get("services", []) if row["id"] == service["id"]), {})
+        status = "planned"
+        if architecture_status != "done":
+            status = "proposed"
+            task, item = None, {}
+        elif task:
+            status = {"done": "ready", "running": "configuring", "reviewing": "checking",
+                      "blocked": "failed", "rework": "failed", "stale": "stale"}.get(task["status"], "planned")
+            if task["status"] == "blocked" and item.get("status") == "needs_input":
+                status = "needs_input"
+        refs = [e["id"] for e in task["evidence"] if e["revision"] == task["revision"] and
+                e["attempt_id"] and e["attempt_id"].startswith(task["id"] + ":r" + str(task["revision"]) + ":a" + str(task["attempts"]) + ":") and e["kind"] == "check"] if task else []
+        rows.append(dict(service, status=status, task_id=task["id"] if task else None,
+                         note=item.get("note") or (task.get("reason") if task else None), evidence=refs))
+    return rows
