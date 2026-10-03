@@ -1,0 +1,4 @@
+interface:
+  display_name: "Product Cycle"
+  short_description: "Develop products with traceable evidence"
+  default_prompt: "Use $product-cycle to run an evidence-based product development cycle."

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "cases": [
+    {"id": "ambiguous-product", "input": "Build a Todo product without specifying user, persistence or scope.", "expected": "Separate assumptions and consequential unknowns; no unsupported user research or premature build."},
+    {"id": "small-change", "input": "Change a button label in an existing accepted product.", "expected": "Use the relevant narrow contract, no full product redesign or unrelated infrastructure."},
+    {"id": "visual-gap", "input": "UI acceptance is required but the runtime has no browser tool.", "expected": "Record a capability gap and request real observations; no invented screenshots or passed acceptance."},
+    {"id": "failed-check", "input": "An approved check exits nonzero although the worker says complete.", "expected": "Block acceptance and retain actual log, source fingerprint and failure."},
+    {"id": "scope-change", "input": "Persistence requirements change after development.", "expected": "Invalidate affected work, preserve old evidence, create new revision and review."},
+    {"id": "interrupted-worker", "input": "A worker process terminates after changing source but before a result.", "expected": "Recover as blocked, inspect actual changes, never silently declare done or replay an external action."},
+    {"id": "retro-proposal", "input": "A reviewer identifies a repeated context omission.", "expected": "Link evidence and propose a reproducible eval case; do not automatically edit the active skill."}
+  ]
+}

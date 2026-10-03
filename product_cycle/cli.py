@@ -1,0 +1,145 @@
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from .contracts import WorkflowError, require
+from .runner import execute, review_task, run_cycle
+from .server import serve
+from .store import Store, fingerprint, now, write_json, runner_lock
+
+
+def parser():
+    cli = argparse.ArgumentParser(description="Product Cycle — quy trình phát triển có bằng chứng")
+    sub = cli.add_subparsers(dest="command", required=True)
+    init = sub.add_parser("init", help="Khởi tạo quy trình cho một dự án")
+    init.add_argument("--project", required=True)
+    init.add_argument("--brief", required=True, help="File mô tả mục tiêu sản phẩm")
+    init.add_argument("--name", required=True)
+    init.add_argument("--model", default="gpt-6.1-sol")
+    init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"], default="high")
+    for name in ["status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "serve", "package", "browser-evidence", "judge"]:
+        cmd = sub.add_parser(name)
+        cmd.add_argument("--project", required=True)
+        if name in {"work", "review", "decide", "reopen", "browser-evidence", "judge"}:
+            cmd.add_argument("--task", required=True)
+        if name == "run":
+            cmd.add_argument("--max-tasks", type=int, default=50)
+        if name == "serve":
+            cmd.add_argument("--port", type=int, default=8787)
+        if name in {"decide", "reopen", "browser-evidence"}:
+            cmd.add_argument("--note", required=True)
+        if name in {"decide", "browser-evidence"}:
+            cmd.add_argument("--actor", required=True)
+        if name == "decide":
+            cmd.add_argument("--action", choices=["approve", "reject"], required=True)
+        if name == "package":
+            cmd.add_argument("--output", required=True)
+        if name == "browser-evidence":
+            cmd.add_argument("--screenshot", required=True, help="File ảnh nằm trong dự án")
+            cmd.add_argument("--url", required=True)
+            cmd.add_argument("--requirements", nargs="+", required=True)
+        if name == "judge":
+            cmd.add_argument("--text", required=True, help="Đoạn nội dung không nhạy cảm được gửi tới Jev")
+            cmd.add_argument("--question", required=True)
+    sub.add_parser("doctor", help="Kiểm tra môi trường, không đọc thông tin bí mật")
+    demo = sub.add_parser("demo", help="Tạo dữ liệu minh họa, không gọi model")
+    demo.add_argument("--project", required=True)
+    sub.add_parser("eval", help="Chạy bộ đánh giá quy trình cục bộ")
+    return cli
+
+
+def doctor():
+    codex = os.environ.get("PRODUCT_CYCLE_CODEX") or shutil.which("codex")
+    result = {"python": sys.version.split()[0], "platform": sys.platform, "codex": codex,
+              "git": shutil.which("git"), "jev": shutil.which("jev"),
+              "browser": "Kiểm tra trong phiên Codex được chọn; không suy ra từ ứng dụng desktop."}
+    if codex:
+        check = subprocess.run([codex, "login", "status"], capture_output=True, text=True, timeout=15)
+        result["codex_authenticated"] = check.returncode == 0
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+def main(argv=None):
+    args = parser().parse_args(argv)
+    store = None
+    try:
+        if args.command == "doctor":
+            return doctor()
+        if args.command == "eval":
+            from .evals import evaluate
+            result = evaluate()
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            if not result["passed"]:
+                raise WorkflowError("Có tình huống đánh giá chưa đạt.")
+            return
+        if args.command == "demo":
+            from .demo import create_demo
+            create_demo(args.project)
+            print("Đã tạo dữ liệu minh họa; chưa chạy AI hay phát triển dự án thật.")
+            return
+        if args.command == "init":
+            store = Store.create(args.project, Path(args.brief).read_text(), args.name, args.model, args.effort)
+            print("Đã khởi tạo: " + str(store.root))
+            return
+        if args.command == "serve":
+            return serve(args.project, args.port)
+        store = Store(args.project)
+        if args.command == "status":
+            print(json.dumps(store.snapshot(), ensure_ascii=False, indent=2))
+        elif args.command == "run":
+            run_cycle(store, args.max_tasks)
+        elif args.command == "work":
+            with runner_lock(store):
+                execute(store, args.task)
+        elif args.command == "review":
+            with runner_lock(store):
+                review_task(store, args.task)
+        elif args.command == "decide":
+            with runner_lock(store):
+                store.decide(args.task, args.action, args.actor, args.note)
+        elif args.command == "reopen":
+            with runner_lock(store):
+                print(json.dumps(store.reopen(args.task, args.note)))
+        elif args.command in {"pause", "resume"}:
+            store.pause(args.command == "pause")
+        elif args.command == "recover":
+            with runner_lock(store):
+                print(json.dumps(store.recover()))
+        elif args.command == "package":
+            with runner_lock(store):
+                print(store.package(args.output))
+        elif args.command == "browser-evidence":
+            task = store.task(args.task)
+            require(task["stage"] == "verify" and task["status"] in {"blocked", "reviewing"}, "Bằng chứng trình duyệt được ghi ở bước nghiệm thu đã có kết quả.")
+            require(set(args.requirements) <= store.requirement_ids(), "Mã yêu cầu chưa hợp lệ.")
+            screenshot = store.safe_path(args.screenshot)
+            require(screenshot.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}, "Cần file ảnh chụp màn hình.")
+            directory = store.latest_directory(args.task)
+            image_id = store.record_file(args.task, str(screenshot.relative_to(store.project)), args.note,
+                                         requirements=args.requirements, producer="operator")
+            # This is explicitly a human observation, never an automated pass.
+            report = {"actor": args.actor, "url": args.url, "observed_at": now(), "observation": args.note,
+                      "screenshot_evidence": image_id, "requirements": args.requirements,
+                      "source_fingerprint": fingerprint(store.project), "producer": "operator"}
+            path = directory / ("browser-" + image_id + ".json")
+            write_json(path, report)
+            eid = store.record_file(args.task, str(path.relative_to(store.project)), args.note,
+                                    ["C1"], args.requirements, "browser", "operator")
+            print(eid)
+        elif args.command == "judge":
+            from .jev import judge
+            result = judge(args.text, args.question)
+            path = store.latest_directory(args.task) / ("jev-" + __import__("uuid").uuid4().hex[:10] + ".json")
+            write_json(path, result)
+            store.record_file(args.task, str(path.relative_to(store.project)), "Nhận định ngữ nghĩa từ Jev", producer="jev")
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+    except (WorkflowError, OSError) as exc:
+        print("Product Cycle: " + str(exc), file=sys.stderr)
+        raise SystemExit(1)
+    finally:
+        if store is not None:
+            store.close()

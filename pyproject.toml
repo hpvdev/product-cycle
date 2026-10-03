@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "product-cycle"
+version = "0.1.0"
+description = "Evidence-based product development workflows powered by Codex"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+product-cycle = "product_cycle.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["product_cycle*"]
+
+[tool.setuptools.package-data]
+product_cycle = ["web/*.html", "resources/*.md", "resources/roles/*.md"]

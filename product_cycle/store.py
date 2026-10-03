@@ -1,0 +1,528 @@
+"""SQLite journal, immutable evidence, dependency gates, and recovery."""
+
+import contextlib
+import hashlib
+import json
+import os
+import shutil
+import sqlite3
+import subprocess
+import time
+import uuid
+from pathlib import Path
+
+from .contracts import (CRITERIA, FILES, STAGE_TITLES, WorkflowError, defaults,
+                        json_object, require, validate_plan, validate_requirements)
+
+
+def now():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def digest(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def write_json(path, value):
+    path = Path(path)
+    temp = path.with_name(path.name + ".tmp-" + uuid.uuid4().hex)
+    temp.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+    os.replace(temp, path)
+
+
+def state_root(project):
+    home = Path(os.environ.get("PRODUCT_CYCLE_HOME", str(Path.home() / ".local" / "share" / "product-cycle"))).expanduser().resolve()
+    # State and sealed evidence are outside the agent's writable project roots.
+    return home / hashlib.sha256(str(Path(project).resolve()).encode()).hexdigest()[:24]
+
+
+def source_files(project):
+    """Source projection shared by fingerprinting and delivery packaging."""
+    project = Path(project).resolve()
+    excluded = {".git", ".product-cycle", "node_modules", ".venv", "__pycache__", "dist", "build", ".runtime"}
+    found = subprocess.run(["git", "ls-files", "-co", "--exclude-standard", "-z"], cwd=project,
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if found.returncode == 0:
+        paths = [project / os.fsdecode(p) for p in found.stdout.split(b"\0") if p]
+    else:
+        paths = []
+        for root, dirs, names in os.walk(project):
+            dirs[:] = [name for name in dirs if name not in excluded]
+            paths.extend(Path(root) / name for name in names)
+    for path in sorted(set(paths)):
+        relative = path.relative_to(project)
+        if any(part in excluded for part in relative.parts) or not path.is_file():
+            continue
+        yield path
+
+
+def fingerprint(project):
+    """Hash source files, excluding controller data and dependency trees."""
+    project = Path(project).resolve()
+    h = hashlib.sha256()
+    for path in source_files(project):
+        relative = path.relative_to(project)
+        if path.is_symlink():
+            h.update(str(relative).encode() + b"\0" + os.readlink(path).encode())
+            continue
+        h.update(str(relative).encode() + b"\0" + path.read_bytes() + b"\0")
+    return h.hexdigest()
+
+
+class Store:
+    def __init__(self, project):
+        self.project = Path(project).expanduser().resolve()
+        self.root = state_root(self.project)
+        require(not self.root.is_relative_to(self.project), "Kho trạng thái phải nằm ngoài thư mục dự án mà AI được ghi.")
+        require((self.root / "state.sqlite3").is_file(), "Dự án chưa được khởi tạo bằng Product Cycle.")
+        self.db = sqlite3.connect(str(self.root / "state.sqlite3"), timeout=10)
+        self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA foreign_keys=ON")
+
+    @classmethod
+    def create(cls, project, brief, name, model="gpt-6.1-sol", effort="high", mode="live"):
+        project = Path(project).expanduser().resolve()
+        project.mkdir(parents=True, exist_ok=True)
+        root = state_root(project)
+        require(not root.is_relative_to(project), "PRODUCT_CYCLE_HOME phải nằm ngoài dự án.")
+        require(not root.exists(), "Dự án đã có một quy trình; dùng status để kiểm tra.")
+        require(brief.strip(), "Cần mô tả mục tiêu sản phẩm.")
+        root.mkdir(mode=0o700, parents=True)
+        (root / "objects").mkdir()
+        (project / ".product-cycle").mkdir(exist_ok=True)
+        (root / "brief.md").write_text(brief.rstrip() + "\n")
+        config = defaults(model, effort)
+        config.update({"name": name, "mode": mode, "created_at": now()})
+        write_json(root / "config.json", config)
+        with sqlite3.connect(str(root / "state.sqlite3")) as db:
+            db.executescript("""
+                CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                INSERT INTO meta VALUES('state','active');
+                CREATE TABLE tasks(
+                    id TEXT PRIMARY KEY, stage TEXT NOT NULL, title TEXT NOT NULL,
+                    instructions TEXT NOT NULL, deps TEXT NOT NULL, criteria TEXT NOT NULL,
+                    requirements TEXT NOT NULL, checks TEXT NOT NULL, status TEXT NOT NULL,
+                    revision INTEGER NOT NULL DEFAULT 1, attempts INTEGER NOT NULL DEFAULT 0,
+                    result TEXT, review TEXT, reason TEXT, fingerprint TEXT,
+                    accepted_at TEXT, created_at TEXT NOT NULL
+                );
+                CREATE TABLE attempts(
+                    id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id),
+                    revision INTEGER NOT NULL, number INTEGER NOT NULL, phase TEXT NOT NULL,
+                    thread_id TEXT, turn_id TEXT, requested_model TEXT NOT NULL,
+                    requested_effort TEXT NOT NULL, observed_model TEXT, observed_effort TEXT,
+                    tokens INTEGER, status TEXT NOT NULL, started_at TEXT NOT NULL, ended_at TEXT,
+                    directory TEXT NOT NULL
+                );
+                CREATE TABLE evidence(
+                    id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id),
+                    revision INTEGER NOT NULL, attempt_id TEXT, kind TEXT NOT NULL,
+                    producer TEXT NOT NULL, source TEXT NOT NULL, object_path TEXT NOT NULL,
+                    sha256 TEXT NOT NULL, criteria TEXT NOT NULL, requirements TEXT NOT NULL,
+                    description TEXT NOT NULL, created_at TEXT NOT NULL
+                );
+                CREATE TABLE decisions(
+                    id INTEGER PRIMARY KEY, task_id TEXT NOT NULL, revision INTEGER NOT NULL,
+                    action TEXT NOT NULL, actor TEXT NOT NULL, note TEXT NOT NULL, created_at TEXT NOT NULL
+                );
+                CREATE TABLE events(
+                    id INTEGER PRIMARY KEY, task_id TEXT, type TEXT NOT NULL,
+                    data TEXT NOT NULL, created_at TEXT NOT NULL
+                );
+            """)
+        store = cls(project)
+        previous = []
+        for stage in ["analysis", "design", "architecture", "plan", "verify", "handoff", "retro"]:
+            store.add_task(stage, stage, STAGE_TITLES[stage], "Complete the " + stage + " contract.",
+                           previous, CRITERIA[stage], [], [])
+            previous = [stage]
+        store.event(None, "cycle.created", {"name": name, "mode": mode, "workflow_version": "0.1.0"})
+        return store
+
+    def close(self):
+        self.db.close()
+
+    @property
+    def config(self):
+        return json_object(self.root / "config.json")
+
+    def event(self, task_id, kind, data):
+        with self.db:
+            self.db.execute("INSERT INTO events(task_id,type,data,created_at) VALUES(?,?,?,?)",
+                            (task_id, kind, json.dumps(data, ensure_ascii=False), now()))
+
+    def add_task(self, tid, stage, title, instructions, deps, criteria, requirements, checks):
+        with self.db:
+            self.db.execute("INSERT INTO tasks(id,stage,title,instructions,deps,criteria,requirements,checks,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                            (tid, stage, title, instructions, json.dumps(deps), json.dumps(criteria),
+                             json.dumps(requirements), json.dumps(checks), "pending", now()))
+
+    @staticmethod
+    def decode(row):
+        item = dict(row)
+        for field in ["deps", "criteria", "requirements", "checks", "result", "review"]:
+            if item.get(field) is not None:
+                item[field] = json.loads(item[field])
+        return item
+
+    def task(self, tid):
+        row = self.db.execute("SELECT * FROM tasks WHERE id=?", (tid,)).fetchone()
+        require(row is not None, "Không tìm thấy công việc: " + tid)
+        return self.decode(row)
+
+    def tasks(self):
+        return [self.decode(row) for row in self.db.execute("SELECT * FROM tasks ORDER BY rowid")]
+
+    def evidence(self, tid, revision=None):
+        revision = revision or self.task(tid)["revision"]
+        records = []
+        for row in self.db.execute("SELECT * FROM evidence WHERE task_id=? AND revision=? ORDER BY created_at,id", (tid, revision)):
+            record = dict(row)
+            record["criteria"] = json.loads(record["criteria"])
+            record["requirements"] = json.loads(record["requirements"])
+            records.append(record)
+        return records
+
+    def current_evidence(self, tid):
+        task = self.task(tid)
+        prefix = tid + ":r" + str(task["revision"]) + ":a" + str(task["attempts"]) + ":"
+        return [item for item in self.evidence(tid) if item["attempt_id"] and item["attempt_id"].startswith(prefix)]
+
+    def update(self, tid, **fields):
+        allowed = {"status", "attempts", "result", "review", "reason", "fingerprint", "accepted_at", "revision", "deps"}
+        require(set(fields) <= allowed, "Trường trạng thái không hợp lệ.")
+        converted = [json.dumps(value, ensure_ascii=False) if key in {"result", "review", "deps"} and value is not None else value for key, value in fields.items()]
+        with self.db:
+            self.db.execute("UPDATE tasks SET " + ",".join(key + "=?" for key in fields) + " WHERE id=?", converted + [tid])
+
+    def safe_path(self, relative):
+        require(isinstance(relative, str) and relative, "Đường dẫn bằng chứng chưa hợp lệ.")
+        path = (self.project / relative).resolve()
+        require(path.is_relative_to(self.project), "Bằng chứng phải nằm trong thư mục dự án.")
+        rel = path.relative_to(self.project)
+        require(not (path.name.startswith(".env") and path.name != ".env.example"), "Không dùng file cấu hình môi trường chứa thông tin bí mật làm bằng chứng.")
+        require(".git" not in rel.parts and path not in [self.root / "state.sqlite3", self.root / "config.json"], "Không sử dụng dữ liệu nội bộ làm bằng chứng.")
+        require(path.is_file() and 0 < path.stat().st_size <= 20 * 1024 * 1024, "Bằng chứng phải là file có nội dung, tối đa 20 MB.")
+        return path
+
+    def record_file(self, tid, relative, description, criteria=None, requirements=None,
+                    kind="artifact", producer="worker", attempt_id=None):
+        task = self.task(tid)
+        path = self.safe_path(relative)
+        sha = digest(path)
+        target = self.root / "objects" / sha
+        if not target.exists():
+            shutil.copyfile(path, target)
+        eid = "E-" + uuid.uuid4().hex[:12]
+        if attempt_id is None and task["attempts"]:
+            attempt_id = tid + ":r" + str(task["revision"]) + ":a" + str(task["attempts"]) + ":work"
+        require(kind in {"artifact", "check", "browser", "manual"}, "Loại bằng chứng chưa hợp lệ.")
+        criteria = criteria or []
+        requirements = requirements or []
+        require(set(criteria) <= {"C" + str(i + 1) for i in range(len(task["criteria"]))}, "Bằng chứng tham chiếu tiêu chí không tồn tại.")
+        with self.db:
+            self.db.execute("INSERT INTO evidence VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (eid, tid, task["revision"], attempt_id, kind, producer,
+                             str(path.relative_to(self.project)), str(target.relative_to(self.root)), sha,
+                             json.dumps(criteria), json.dumps(requirements), description, now()))
+        self.event(tid, "evidence.recorded", {"id": eid, "kind": kind, "producer": producer, "sha256": sha})
+        return eid
+
+    def intact(self, records):
+        for evidence in records:
+            path = self.root / evidence["object_path"]
+            require(path.is_file() and digest(path) == evidence["sha256"], "Bằng chứng đã thay đổi hoặc không còn: " + evidence["id"])
+
+    def next_task(self):
+        require(self.db.execute("SELECT value FROM meta WHERE key='state'").fetchone()[0] == "active", "Quy trình đang tạm dừng.")
+        tasks = self.tasks()
+        done = {task["id"] for task in tasks if task["status"] == "done"}
+        for task in tasks:
+            if task["status"] in {"pending", "rework", "stale"} and set(task["deps"]) <= done:
+                if task["attempts"] >= self.config["max_attempts"]:
+                    self.update(task["id"], status="blocked", reason="Đã đạt giới hạn thực hiện; cần xác định nguyên nhân rồi mở revision mới.")
+                    self.event(task["id"], "task.blocked", {"reason": "attempt_budget"})
+                    continue
+                return task
+        return None
+
+    def begin(self, tid, phase):
+        task = self.task(tid)
+        require(phase in {"work", "review"}, "Giai đoạn thực thi không hợp lệ.")
+        if phase == "work":
+            require(task["status"] in {"pending", "rework", "stale", "blocked"}, "Công việc chưa sẵn sàng thực thi.")
+            require(all(self.task(dep)["status"] == "done" for dep in task["deps"]), "Phụ thuộc chưa hoàn tất.")
+            require(task["attempts"] < self.config["max_attempts"], "Đã đạt giới hạn số lần thực hiện; cần xác định nguyên nhân trước khi tiếp tục.")
+            number = task["attempts"] + 1
+            self.update(tid, status="running", attempts=number, reason=None, result=None, review=None)
+        else:
+            require(task["status"] == "reviewing", "Công việc chưa sẵn sàng review.")
+            number = task["attempts"]
+        directory = self.project / ".product-cycle" / "artifacts" / tid / ("r" + str(task["revision"])) / ("a" + str(number)) / phase
+        if phase == "review":
+            reviews = self.db.execute("SELECT COUNT(*) FROM attempts WHERE task_id=? AND revision=? AND number=? AND phase='review'", (tid, task["revision"], number)).fetchone()[0]
+            directory = directory.with_name("review-" + str(reviews + 1))
+        directory.mkdir(parents=True, exist_ok=False)
+        aid = tid + ":r" + str(task["revision"]) + ":a" + str(number) + ":" + phase
+        if phase == "review":
+            aid += ":" + str(reviews + 1)
+        model = self.config["models"]["review" if phase == "review" else task["stage"]]
+        with self.db:
+            self.db.execute("INSERT INTO attempts(id,task_id,revision,number,phase,requested_model,requested_effort,status,started_at,directory) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                            (aid, tid, task["revision"], number, phase, model["model"], model["effort"], "running", now(), str(directory)))
+        self.event(tid, "attempt.started", {"id": aid, "phase": phase, **model})
+        return aid, directory
+
+    def attempt_update(self, aid, **fields):
+        allowed = {"thread_id", "turn_id", "observed_model", "observed_effort", "tokens", "status", "ended_at"}
+        require(set(fields) <= allowed, "Trường phiên thực thi chưa hợp lệ.")
+        with self.db:
+            self.db.execute("UPDATE attempts SET " + ",".join(key + "=?" for key in fields) + " WHERE id=?", list(fields.values()) + [aid])
+
+    def latest_directory(self, tid, phase="work"):
+        task = self.task(tid)
+        row = self.db.execute("SELECT directory FROM attempts WHERE task_id=? AND revision=? AND phase=? ORDER BY rowid DESC LIMIT 1", (tid, task["revision"], phase)).fetchone()
+        require(row is not None, "Chưa có phiên thực thi.")
+        return Path(row[0])
+
+    def validate_outputs(self, tid, result):
+        task = self.task(tid)
+        require(isinstance(result, dict) and isinstance(result.get("summary"), str) and result["summary"].strip(), "Kết quả cần có tóm tắt.")
+        require(isinstance(result.get("artifacts"), list) and result["artifacts"], "Kết quả cần có đầu ra thực tế.")
+        require(result.get("blocker") is None, "Công việc cần xử lý vấn đề đang chặn trước khi hoàn tất.")
+        require(isinstance(result.get("limitations"), list), "Kết quả cần khai báo giới hạn.")
+        directory = self.latest_directory(tid)
+        paths = []
+        for item in result["artifacts"]:
+            require(isinstance(item, dict) and isinstance(item.get("purpose"), str) and item["purpose"].strip(), "Đầu ra cần có mục đích.")
+            require(isinstance(item.get("criteria"), list) and isinstance(item.get("requirements"), list), "Đầu ra cần liên kết tiêu chí và yêu cầu.")
+            paths.append(self.safe_path(item.get("path")))
+        for filename in FILES.get(task["stage"], []):
+            require(directory / filename in paths, "Thiếu đầu ra bắt buộc: " + filename)
+        if task["stage"] == "analysis":
+            validate_requirements(json_object(directory / "requirements.json"))
+        if task["stage"] == "plan":
+            validate_plan(json_object(directory / "plan.json"), self.requirement_ids())
+        if task["stage"] == "retro":
+            retro = json_object(directory / "retro.json")
+            require(isinstance(retro.get("observations"), list) and isinstance(retro.get("improvements"), list), "Retro cần quan sát và đề xuất cải thiện.")
+            for improvement in retro["improvements"]:
+                require(isinstance(improvement, dict) and improvement.get("change") and improvement.get("eval_case") and improvement.get("evidence_ids"), "Đề xuất retro cần bằng chứng và tình huống đánh giá.")
+                known = {row[0] for row in self.db.execute("SELECT id FROM evidence")}
+                require(isinstance(improvement["evidence_ids"], list) and set(improvement["evidence_ids"]) <= known,
+                        "Retro tham chiếu bằng chứng không tồn tại.")
+                case = improvement["eval_case"]
+                require(isinstance(case, dict) and isinstance(case.get("input"), str) and case["input"].strip() and
+                        isinstance(case.get("expected"), str) and case["expected"].strip(), "Tình huống đánh giá cần input và expected rõ ràng.")
+        return paths
+
+    def requirement_ids(self):
+        task = self.task("analysis")
+        require(task["status"] == "done", "Phân tích chưa được chấp nhận.")
+        for item in self.current_evidence("analysis"):
+            if Path(item["source"]).name == "requirements.json":
+                return validate_requirements(json_object(self.root / item["object_path"]))
+        raise WorkflowError("Thiếu danh sách yêu cầu đã chốt.")
+
+    def approved_plan(self):
+        require(self.task("plan")["status"] == "done", "Kế hoạch chưa được chấp nhận.")
+        records = self.current_evidence("plan")
+        self.intact(records)
+        for item in records:
+            if Path(item["source"]).name == "plan.json":
+                return json_object(self.root / item["object_path"])
+        raise WorkflowError("Thiếu kế hoạch đã chốt.")
+
+    def work_finished(self, tid, aid, result):
+        task = self.task(tid)
+        self.validate_outputs(tid, result)
+        for item in result["artifacts"]:
+            self.record_file(tid, item["path"], item["purpose"], item["criteria"], item["requirements"], attempt_id=aid)
+        self.attempt_update(aid, status="completed", ended_at=now())
+        self.update(tid, result=result, status="reviewing", fingerprint=fingerprint(self.project))
+        self.event(tid, "work.completed", {"summary": result["summary"], "revision": task["revision"]})
+
+    def validate_review(self, tid, review):
+        task = self.task(tid)
+        require(isinstance(review, dict) and review.get("decision") in {"approve", "rework", "blocked"}, "Review chưa có quyết định hợp lệ.")
+        require(isinstance(review.get("summary"), str) and review["summary"].strip() and
+                isinstance(review.get("findings"), list), "Review cần nhận xét rõ ràng.")
+        if review["decision"] != "approve":
+            return
+        records = self.current_evidence(tid)
+        self.intact(records)
+        evidence_ids = {item["id"] for item in records}
+        expected = {"C" + str(i + 1) for i in range(len(task["criteria"]))}
+        rows = review.get("criteria", [])
+        require(isinstance(rows, list) and len(rows) == len(expected) and {item.get("id") for item in rows} == expected,
+                "Review chưa đánh giá đầy đủ tiêu chí.")
+        for row in rows:
+            require(row.get("passed") is True and isinstance(row.get("evidence"), list) and row["evidence"] and
+                    set(row["evidence"]) <= evidence_ids and row.get("reason"), "Tiêu chí chưa đạt hoặc chưa có bằng chứng hợp lệ.")
+            require(any(row["id"] in item["criteria"] for item in records if item["id"] in row["evidence"]), "Bằng chứng chưa liên kết với tiêu chí được review.")
+        checks = [item for item in records if item["kind"] == "check"]
+        required_checks = task["checks"] if task["stage"] == "build" else self.approved_plan().get("verification_commands", []) if task["stage"] == "verify" else []
+        for command in required_checks:
+            matching = [json_object(self.root / item["object_path"]) for item in checks]
+            require(any(item.get("argv") == command and item.get("exit_code") == 0 and
+                        item.get("source_fingerprint") == task["fingerprint"] for item in matching), "Lệnh kiểm tra chưa thành công trên phiên bản hiện tại.")
+        require(task["fingerprint"] == fingerprint(self.project), "Sản phẩm thay đổi sau khi kiểm chứng; cần thực hiện lại kiểm tra.")
+        if task["stage"] == "verify" and self.approved_plan().get("browser_required", False):
+            browser_records = [json_object(self.root / item["object_path"]) for item in records if item["kind"] == "browser" and item["producer"] == "operator"]
+            covered = {rid for item in browser_records if item.get("source_fingerprint") == task["fingerprint"] for rid in item.get("requirements", [])}
+            require(covered >= self.requirement_ids(), "Cần kiểm chứng trình duyệt thực tế, bao phủ yêu cầu, cho phiên bản hiện tại.")
+
+    def review_finished(self, tid, aid, review):
+        self.validate_review(tid, review)
+        self.attempt_update(aid, status="completed", ended_at=now())
+        status = {"approve": "awaiting_approval" if self.task(tid)["stage"] in self.config["gates"] else "done",
+                  "rework": "rework", "blocked": "blocked"}[review["decision"]]
+        self.update(tid, review=review, status=status, reason=None if status in {"done", "awaiting_approval"} else review["summary"])
+        self.event(tid, "review.completed", {"decision": review["decision"], "status": status})
+        if status == "done":
+            self.accept(tid)
+
+    def accept(self, tid):
+        task = self.task(tid)
+        self.validate_outputs(tid, task["result"])
+        self.validate_review(tid, task["review"])
+        # Gate decisions are tied to the exact files reviewed, not mutable filenames.
+        for item in self.current_evidence(tid):
+            if item["kind"] == "artifact":
+                require(digest(self.safe_path(item["source"])) == item["sha256"], "Đầu ra thay đổi sau review; cần review lại.")
+        if task["stage"] == "plan":
+            plan = json_object(self.latest_directory(tid) / "plan.json")
+            tasks = validate_plan(plan, self.requirement_ids())
+            # Avoid partial expansion: all inserts and dependencies commit together.
+            with self.db:
+                self.db.execute("UPDATE tasks SET status='superseded' WHERE stage='build'")
+                for item in tasks:
+                    existing = self.db.execute("SELECT id FROM tasks WHERE id=?", (item["id"],)).fetchone()
+                    if existing:
+                        self.db.execute("UPDATE tasks SET title=?,instructions=?,deps=?,criteria=?,requirements=?,checks=?,status='pending' WHERE id=?",
+                                        (item["title"], item["instructions"], json.dumps(["plan"] + item["depends_on"]), json.dumps(item["criteria"]),
+                                         json.dumps(item["requirements"]), json.dumps(item.get("checks", [])), item["id"]))
+                    else:
+                        self.db.execute("INSERT INTO tasks(id,stage,title,instructions,deps,criteria,requirements,checks,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                                    (item["id"], "build", item["title"], item["instructions"], json.dumps(["plan"] + item["depends_on"]),
+                                     json.dumps(item["criteria"]), json.dumps(item["requirements"]), json.dumps(item.get("checks", [])), "pending", now()))
+                self.db.execute("UPDATE tasks SET deps=? WHERE id='verify'", (json.dumps([item["id"] for item in tasks]),))
+            config = self.config
+            config["verification_commands"] = plan.get("verification_commands", [])
+            config["browser_required"] = plan.get("browser_required", False)
+            write_json(self.root / "config.json", config)
+        self.update(tid, status="done", accepted_at=now())
+        self.event(tid, "task.accepted", {"revision": task["revision"]})
+
+    def decide(self, tid, action, actor, note):
+        task = self.task(tid)
+        require(task["status"] == "awaiting_approval", "Công việc chưa chờ quyết định.")
+        require(action in {"approve", "reject"} and actor.strip() and note.strip(), "Quyết định cần người xác nhận và lý do.")
+        if action == "approve":
+            self.accept(tid)
+        else:
+            self.update(tid, status="rework", reason=note)
+        with self.db:
+            self.db.execute("INSERT INTO decisions(task_id,revision,action,actor,note,created_at) VALUES(?,?,?,?,?,?)",
+                            (tid, task["revision"], action, actor, note, now()))
+        self.event(tid, "decision.recorded", {"action": action, "actor": actor, "note": note})
+
+    def reopen(self, tid, reason):
+        require(reason.strip(), "Cần ghi lý do mở lại công việc.")
+        require(not any(task["status"] in {"running", "reviewing"} for task in self.tasks()), "Dừng phiên đang chạy trước khi thay đổi phạm vi.")
+        affected = {tid}
+        tasks = self.tasks()
+        self.task(tid)
+        while True:
+            expanded = affected | {task["id"] for task in tasks if set(task["deps"]) & affected}
+            if expanded == affected:
+                break
+            affected = expanded
+        with self.db:
+            for item in affected:
+                self.db.execute("UPDATE tasks SET status='stale',revision=revision+1,attempts=0,result=NULL,review=NULL,accepted_at=NULL,reason=? WHERE id=?", (reason, item))
+        self.event(tid, "scope.reopened", {"affected": sorted(affected), "reason": reason})
+        return sorted(affected)
+
+    def pause(self, paused):
+        with self.db:
+            self.db.execute("UPDATE meta SET value=? WHERE key='state'", ("paused" if paused else "active",))
+        self.event(None, "cycle.paused" if paused else "cycle.resumed", {})
+
+    def recover(self):
+        recovered = []
+        with self.db:
+            for task in self.tasks():
+                if task["status"] in {"running", "reviewing"}:
+                    self.db.execute("UPDATE tasks SET status='blocked',reason=? WHERE id=?", ("Phiên trước bị gián đoạn; kiểm tra thay đổi thực tế rồi mở lại công việc.", task["id"]))
+                    recovered.append(task["id"])
+            self.db.execute("UPDATE attempts SET status='interrupted',ended_at=? WHERE status='running'", (now(),))
+        self.event(None, "cycle.recovered", {"tasks": recovered})
+        return recovered
+
+    def snapshot(self, full_history=False):
+        tasks = self.tasks()
+        for task in tasks:
+            history = []
+            for revision in range(1, task["revision"] + 1):
+                history.extend(self.evidence(task["id"], revision))
+            task["evidence"] = history
+            task["attempt_history"] = [dict(row) for row in self.db.execute("SELECT * FROM attempts WHERE task_id=? ORDER BY rowid", (task["id"],))]
+        events = [dict(row) for row in self.db.execute("SELECT * FROM events ORDER BY id DESC" + ("" if full_history else " LIMIT 250"))]
+        for event in events:
+            event["data"] = json.loads(event["data"])
+        return {"config": self.config, "project": str(self.project),
+                "state": self.db.execute("SELECT value FROM meta WHERE key='state'").fetchone()[0],
+                "tasks": tasks, "events": events,
+                "tokens": self.db.execute("SELECT SUM(tokens) FROM attempts").fetchone()[0],
+                "decisions": [dict(row) for row in self.db.execute("SELECT * FROM decisions ORDER BY id")]}
+
+    def package(self, destination):
+        require(all(task["status"] in {"done", "superseded"} for task in self.tasks()), "Chỉ đóng gói khi toàn bộ quy trình đã hoàn tất.")
+        records = [item for task in self.snapshot()["tasks"] for item in task["evidence"]]
+        self.intact(records)
+        require(self.task("verify")["fingerprint"] == fingerprint(self.project), "Sản phẩm thay đổi sau nghiệm thu; cần kiểm chứng lại.")
+        destination = Path(destination).resolve()
+        require(not destination.exists() and not destination.is_relative_to(self.project), "Gói bàn giao cần một thư mục mới nằm ngoài dự án.")
+        destination.mkdir(parents=True)
+        (destination / "evidence").mkdir()
+        (destination / "source").mkdir()
+        source_manifest, omitted = [], []
+        for source in source_files(self.project):
+            relative = source.relative_to(self.project)
+            # Include source, not runtime secrets or external symlink targets.
+            if source.is_symlink() or (source.name.startswith(".env") and source.name != ".env.example"):
+                omitted.append(str(relative))
+                continue
+            target = destination / "source" / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            source_manifest.append({"path": str(relative), "sha256": digest(target)})
+        snapshot = self.snapshot(full_history=True)
+        write_json(destination / "manifest.json", {"workflow_version": self.config["workflow_version"], "packaged_at": now(),
+                  "source_fingerprint": fingerprint(self.project), "mode": self.config["mode"], "snapshot": snapshot,
+                  "source_files": source_manifest, "omitted_source_paths": omitted})
+        for item in records:
+            shutil.copyfile(self.root / item["object_path"], destination / "evidence" / item["sha256"])
+        (destination / "brief.md").write_text((self.root / "brief.md").read_text())
+        return destination
+
+
+@contextlib.contextmanager
+def runner_lock(store):
+    """One controller per project. The OS releases the lock after a crash."""
+    import fcntl
+    with (store.root / "runner.lock").open("a+") as lock:
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise WorkflowError("Một phiên điều phối khác đang hoạt động.") from exc
+        lock.seek(0)
+        lock.truncate()
+        lock.write(str(os.getpid()))
+        lock.flush()
+        try:
+            yield
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)

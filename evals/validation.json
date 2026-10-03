@@ -1,0 +1,41 @@
+{
+  "created_at": "2026-10-03T12:09:03.072977+00:00",
+  "automated_tests": 28,
+  "automated_tests_passed": true,
+  "controller_eval_cases": 8,
+  "skill_valid": true,
+  "live_codex_check": {
+    "passed": true,
+    "status": "awaiting_approval",
+    "attempts": [
+      {
+        "phase": "work",
+        "observed_model": "gpt-6.1-sol",
+        "observed_effort": "high",
+        "tokens": 126810,
+        "status": "completed"
+      },
+      {
+        "phase": "review",
+        "observed_model": "gpt-6.1-sol",
+        "observed_effort": "high",
+        "tokens": 107670,
+        "status": "completed"
+      }
+    ]
+  },
+  "not_verified": [
+    "Full product development on a real project",
+    "Manual visual acceptance of the dashboard",
+    "Production deployment or monitoring"
+  ],
+  "jev_adapter": {
+    "verified": true,
+    "model": "jev-1.13.0",
+    "provider": "typesafe",
+    "typed_answer": "noul",
+    "assessment": 0.97,
+    "input_tokens": 290,
+    "output_tokens": 20
+  }
+}
