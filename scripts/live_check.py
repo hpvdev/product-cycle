@@ -35,6 +35,9 @@ Do not claim user interviews or implement the product. This check only evaluates
 """
     store = Store.create(output / "project", brief, "Live adapter check", args.model, args.effort)
     try:
+        config = store.config
+        config.update(executor="codex-app-server", collaborative_product=False, experience_checkpoint_required=False)
+        write_json(store.root / "config.json", config)
         print("Running real Codex work and independent review…", flush=True)
         execute(store, "analysis")
         snapshot = store.snapshot()

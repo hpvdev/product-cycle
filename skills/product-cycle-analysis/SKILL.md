@@ -20,3 +20,5 @@ When invoked on its own, perform only the requested stage in the selected projec
 5. Viết yêu cầu và tiêu chí: Mỗi yêu cầu có hành vi quan sát được để nghiệm thu.
 
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
+
+Interview the owner in Codex about consequential product choices, propose directions and tradeoffs, and preserve their actual feedback. Do not silently shrink the product idea. Produce the collaborative product direction contract when required; owner approval precedes downstream work.

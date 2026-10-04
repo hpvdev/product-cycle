@@ -33,12 +33,14 @@ python3 -m product_cycle serve --project /absolute/product
 python3 -m product_cycle run --project /absolute/product
 ```
 
-Dự án mới phát triển và bàn giao local, có review độc lập từng giai đoạn và điểm quyết định của chủ sản phẩm tại handoff. Thiết kế kỹ thuật nêu dịch vụ cần dùng và thông tin cần cấp; sau khi plan được review, controller tạo việc cấu hình và chỉ chặn các đầu việc phụ thuộc. VPS và phát hành ra ngoài để sau. Dự án cũ giữ nguyên cấu hình. UI acceptance có thể cần operator nếu app-server thiếu browser.
+Dự án mới thực thi trong ứng dụng Codex; dashboard chỉ đọc tiến độ, tài liệu và bằng chứng. Bạn cùng AI chốt hướng sản phẩm, UX/UI, dùng thử trải nghiệm cốt lõi và nghiệm thu bàn giao. AI tự triển khai phần đã chốt, có review độc lập từng giai đoạn. Thiết kế kỹ thuật nêu dịch vụ cần dùng và thông tin cần cấp; sau khi plan được review, controller tạo việc cấu hình và chỉ chặn các đầu việc phụ thuộc. VPS và phát hành ra ngoài để sau. Dự án cũ giữ nguyên cấu hình. UI acceptance cần quan sát thực tế; không suy ra công cụ sẵn có ở một runtime khác.
 
 ```sh
 python3 -m product_cycle decide --project /absolute/product --task handoff --action approve --actor "Chủ sản phẩm" --note "Chấp nhận bản local và kết quả kiểm chứng"
 python3 -m product_cycle run --project /absolute/product
 ```
+
+`run` ở chế độ Codex App chuẩn bị công việc, không tự gọi model. Chat Codex đang hoạt động dùng skill product-cycle để nhận công việc, trao đổi với bạn và gửi kết quả về controller. Xem [vòng thực thi native](skills/product-cycle/references/operating-guide.md#native-codex-loop). Chọn `init --executor codex-app-server` nếu muốn chạy bằng App Server riêng.
 
 `init` tự chuẩn bị Git nếu chưa có, bổ sung `.gitignore`, tạo `AGENTS.md`/`PRODUCT_CYCLE_RULES.md` và cài 12 skill theo project. Giữ nguyên Git, hướng dẫn và skill đã có; không tự commit/push. Thiết kế kỹ thuật tạo `project-setup.json`; công việc chuẩn bị bên trong Phát triển tạo coding rules theo stack, cấu trúc code, môi trường, công cụ kiểm tra và phần dùng chung trước mọi task chức năng. State và bằng chứng đã chốt nằm ở `~/.local/share/product-cycle`, ngoài vùng AI được ghi. `PRODUCT_CYCLE_HOME` đổi nơi lưu; giữ nguyên trong một cycle. `PRODUCT_CYCLE_CODEX` chọn binary nếu Codex không nằm trong PATH.
 
@@ -50,7 +52,7 @@ python3 -m product_cycle bootstrap --project /absolute/product
 python3 -m product_cycle install-skills --project /absolute/product
 ```
 
-`bootstrap` bổ sung nền tảng cho cycle cũ khi không có phiên chạy; nếu source đã nghiệm thu thay đổi, bước verify và phần phụ thuộc cần thực hiện lại. Nó không tự thêm công việc chuẩn bị theo stack vào cycle cũ. Dùng cycle mới để áp dụng trọn hợp đồng v0.3. `install-skills` cài riêng và từ chối ghi đè. Các lệnh có trong wheel, dùng được ngoài checkout sau khi cài bằng pip. Graphify là tùy chọn khi repo đã có quan hệ code phức tạp; không cài mặc định cho project mới nhỏ.
+`bootstrap` bổ sung nền tảng cho cycle cũ khi không có phiên chạy; nếu source đã nghiệm thu thay đổi, bước verify và phần phụ thuộc cần thực hiện lại. Nó không tự thêm công việc chuẩn bị theo stack vào cycle cũ. Dùng cycle mới để áp dụng trọn hợp đồng hiện tại. `configure --project ... --executor codex-desktop` chuyển nơi thực thi của cycle cũ, giữ lịch sử và gate cũ; hợp đồng cộng tác cần được áp dụng ở revision được chủ sản phẩm đồng ý mở lại. `install-skills` cài riêng và từ chối ghi đè. Các lệnh có trong wheel, dùng được ngoài checkout sau khi cài bằng pip. Graphify là tùy chọn khi repo đã có quan hệ code phức tạp; không cài mặc định cho project mới nhỏ.
 
 ## Kiểm chứng
 
@@ -65,7 +67,7 @@ Hai lệnh đầu dùng tình huống tổng hợp/adapter giả lập, không g
 ## Thành phần
 
 - Controller/CLI: phụ thuộc, retry, pause/resume, recover, đổi phạm vi, quyết định, đóng gói.
-- Codex adapter: phiên work/review riêng, model/effort thực tế, trace, lỗi, timeout, token khi có.
+- Codex adapter: handoff trong Codex App mặc định; App Server là lựa chọn riêng. Work/review độc lập, cấu hình yêu cầu phân biệt với model/effort đã quan sát, token khi có.
 - Hợp đồng từng vai trò, skill tái sử dụng, installer cho project được chọn.
 - Lệnh kiểm tra thật, bằng chứng có hash/nguồn/phiên bản, manifest bàn giao.
 - Dashboard: đủ đầu việc trong plan ngay khi có đầu ra, trạng thái/bước hiện tại, tiêu chí đạt, bằng chứng, cấu hình dịch vụ và nghiệm thu toàn sản phẩm riêng biệt.

@@ -62,9 +62,22 @@ function structuredContent(value, depth=0, key='') {
   }).join('')+'</dl>';
 }
 function markdownInline(text) {
-  return escape(text).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  return escape(text).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/\?evidence=E-[a-z0-9]+)\)/g,(match,label,url)=>url.startsWith('/?evidence=')?'<a href="'+url+'" data-evidence="'+url.split('=')[1]+'">'+label+'</a>':'<a href="'+url+'" target="_blank" rel="noopener noreferrer">'+label+'</a>');
 }
-function markdownContent(text) {
+function markdownContent(text, origin=null) {
+  if(origin)text=text.replace(/\[([^\]]*)\]\(<?([^\n)]+?)>?\)/g,(match,label,path)=>{
+    if(/^[a-z][a-z0-9+.-]*:/i.test(path))return match;
+    try{
+      const root='file://'+state.project.replace(/\/$/,'')+'/',source=decodeURIComponent(new URL(path,root+origin.source).pathname);
+      const records=evidenceRecords().filter(record=>state.project+'/'+record.source===source);
+      const sameAttempt=records.filter(record=>record.attempt_id===origin.attempt_id);
+      // Ambiguous historical links must not silently point to a different version.
+      const candidates=sameAttempt.length?sameAttempt:records;
+      const versions=new Set(candidates.map(record=>record.sha256));
+      const record=versions.size===1?candidates[0]:null;
+      return record?'['+label+'](/?evidence='+record.id+')':match;
+    }catch{return match}
+  });
   const lines=text.split(/\r?\n/),parts=[];
   let code=null,list=null,table=[];
   function closeList(){if(list){parts.push('</'+list+'>');list=null}}
@@ -110,7 +123,7 @@ async function openEvidence(id) {
     let content;
     if(/\.(png|jpe?g|webp)$/.test(source))content='<img src="/evidence/'+encodeURIComponent(id)+'" alt="'+escape(record.description)+'">';
     else if(/\.json$/.test(source))content=structuredContent(JSON.parse(text));
-    else if(/\.md$/.test(source))content=markdownContent(text);
+    else if(/\.md$/.test(source))content=markdownContent(text,record);
     else if(/\.html?$/.test(source))content='<p class="muted">Mô hình chạy trong khung xem riêng. Đây là thiết kế tham khảo, chưa phải sản phẩm đã nghiệm thu.</p><iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="Mô hình giao diện" srcdoc="'+escape(previewDocument(text))+'"></iframe>';
     else if(/\.pdf$/.test(source))content='<p>Tài liệu PDF được mở bằng trình đọc của trình duyệt.</p><a href="/evidence/'+encodeURIComponent(id)+'" target="_blank" rel="noopener">Đọc tài liệu PDF</a>';
     else content='<pre>'+escape(text)+'</pre>';

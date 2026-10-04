@@ -23,7 +23,7 @@ flowchart LR
  G --> E[Retro và gói bằng chứng]
 ```
 
-Mọi công việc có phiên thực hiện và review riêng. Sơ đồ nhấn mạnh review phát triển để dễ đọc. Dự án mới chỉ có quyết định chủ sản phẩm tại handoff; mỗi bước trước đó vẫn cần review độc lập. Cấu hình thật chỉ bắt đầu sau khi phân tích, thiết kế và plan đã hoàn tất review. Thiếu một dịch vụ không chặn các việc không phụ thuộc. VPS và phát hành ra ngoài được ghi là để sau, không phải điều kiện hoàn tất bản local. Dự án cũ giữ gate riêng.
+Mọi công việc có phiên thực hiện và review riêng. Sơ đồ nhấn mạnh review phát triển để dễ đọc. Dự án mới có quyết định chủ sản phẩm tại phân tích, UX/UI, mốc dùng thử trải nghiệm cốt lõi và handoff; mỗi bước trước đó vẫn cần review độc lập. Cấu hình thật chỉ bắt đầu sau khi phân tích, thiết kế và plan đã hoàn tất review. Thiếu một dịch vụ không chặn các việc không phụ thuộc. VPS và phát hành ra ngoài được ghi là để sau, không phải điều kiện hoàn tất bản local. Dự án cũ giữ gate riêng.
 
 ## Phân cấp trên dashboard
 
@@ -63,3 +63,12 @@ Retro giữ quan sát và đề xuất. Cải thiện cần bằng chứng cùng
 Plan có bao nhiêu đầu việc, dashboard hiển thị đủ bấy nhiêu từ lúc có đầu ra dự kiến. Trạng thái thực thi chỉ bắt đầu khi plan được review/chấp nhận theo cấu hình. Mỗi dòng cho xem bước hiện tại, phụ thuộc chưa xong, tiêu chí đã đạt và bằng chứng. Đã kiểm chứng đầu việc không đồng nghĩa chủ sản phẩm đã nghiệm thu toàn sản phẩm.
 
 Thiết kế kỹ thuật tạo services.json: mục đích, môi trường/tài khoản, quyền, tên thông tin cần cấp, cách cấu hình, kiểm tra, người cung cấp, chi phí và phương án xử lý. Readiness từ worker là báo cáo; trạng thái sẵn sàng chỉ được xác nhận sau kiểm tra kết nối của controller và review. Không lưu giá trị bí mật trên dashboard.
+
+
+## Cộng tác trong Codex
+
+Phân tích phỏng vấn chủ sản phẩm về các quyết định ảnh hưởng trải nghiệm, đề xuất hướng và đánh đổi, ghi mục tiêu chất lượng có cách kiểm chứng trong product-direction.json. Các phương án chưa phải quyết định. UX/UI dùng hình/prototype thực tế để trao đổi và chỉnh trước khi chủ sản phẩm chốt. Các câu hỏi định hướng còn mở phải được xử lý trước khi chấp nhận phân tích.
+
+Plan chỉ định experience_checkpoint: một phần dùng được xuyên suốt hành trình chính. Chủ sản phẩm dùng thử và phản hồi trước khi mở rộng. AI tự thực hiện setup, code, kiểm tra và review trong phạm vi đã chốt; không yêu cầu duyệt từng task. Kiểm chứng cuối đối chiếu cả mục tiêu trải nghiệm, thiết kế và hành vi, không suy ra chất lượng sản phẩm từ số task hoàn tất.
+
+Trao đổi, chốt, yêu cầu sửa và tiếp tục diễn ra trong Codex. Dashboard chỉ hiển thị cấu hình, phương án, quyết định, tiến độ và bằng chứng, tự đọc dữ liệu mới. Codex App là executor mặc định cho cycle mới; App Server vẫn có thể được chọn riêng. Chuẩn bị handoff không tự khởi chạy AI: cần phiên Codex đang điều phối. Một task chỉ có một phiên sở hữu; review dùng ngữ cảnh độc lập. Không đưa cả hai executor cùng ghi một chat.

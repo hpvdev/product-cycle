@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from product_cycle.codex import CodexClient
+from product_cycle.codex import CodexClient, ModelCapacityError, provider_error
 from product_cycle.contracts import WorkflowError
 
 
@@ -29,6 +29,30 @@ class CodexProtocolTests(unittest.TestCase):
     def test_failed_turn_is_not_success(self):
         with self.assertRaises(WorkflowError):
             self.run_peer("failed")
+
+    def test_capacity_is_retryable_but_quota_and_auth_are_not(self):
+        for mode in ("capacity", "capacity-request"):
+            with self.subTest(mode=mode), self.assertRaises(ModelCapacityError):
+                self.run_peer(mode)
+        for info in ("usageLimitExceeded", "unauthorized", "rateLimitExceeded"):
+            self.assertNotIsInstance(provider_error({"message": "Unavailable", "codexErrorInfo": info}), ModelCapacityError)
+
+    def test_read_thread_does_not_start_a_model_turn(self):
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            command = [sys.executable, str(Path(__file__).with_name("fake_appserver.py"))]
+            with CodexClient(directory, command=command) as client:
+                thread = client.read_thread("existing-thread")
+            self.assertEqual(thread["id"], "existing-thread")
+            self.assertEqual(thread["turns"][0]["status"], "completed")
+            self.assertNotIn('"turn/start"', (directory / "trace.jsonl").read_text())
+
+    def test_desktop_chat_ownership_is_explained_without_exposing_raw_error(self):
+        error = provider_error({"message": "thread internal-id already has an active writer"})
+        self.assertIsInstance(error, WorkflowError)
+        self.assertNotIsInstance(error, ModelCapacityError)
+        self.assertIn("Mở chat trong Codex", str(error))
+        self.assertNotIn("internal-id", str(error))
 
     def test_worker_thread_has_a_readable_name(self):
         result, events = self.run_peer(title="Vocabulary game — Develop round")

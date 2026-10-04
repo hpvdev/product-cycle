@@ -42,13 +42,13 @@ WORK_STEPS = {
         ("Xác định người dùng và mục tiêu", "Nêu ai sử dụng sản phẩm và kết quả họ cần đạt."),
         ("Làm rõ vấn đề", "Mô tả tình huống sử dụng, khó khăn và nhu cầu chính."),
         ("Đối chiếu dữ kiện và giả định", "Ghi nguồn, giả định và câu hỏi còn ảnh hưởng tới quyết định."),
-        ("Chốt phạm vi", "Xác định phiên bản đầu tiên, giới hạn và những phần để sau."),
+        ("Đề xuất hướng và phạm vi để bạn chốt", "So sánh trải nghiệm, điểm khác biệt và đánh đổi; ghi câu hỏi còn mở, chưa coi giả định là quyết định của bạn."),
         ("Viết yêu cầu và tiêu chí", "Mỗi yêu cầu có hành vi quan sát được để nghiệm thu."),
     ],
     "design": [
         ("Vẽ luồng thao tác", "Liên kết hành trình chính với yêu cầu đã chốt."),
         ("Khảo sát hướng thiết kế", "Dùng thiết kế hiện có hoặc tạo phương án bằng Product Design và Image Gen khi công cụ sẵn có."),
-        ("Đề xuất mốc thiết kế", "Lưu hình tham khảo hoặc prototype cụ thể để chủ sản phẩm duyệt."),
+        ("Thử và đề xuất mốc thiết kế", "Chuẩn bị prototype phù hợp, lấy phản hồi trong Codex và lưu bản cụ thể để bạn chốt."),
         ("Bổ sung trạng thái màn hình", "Mô tả dữ liệu, trống, tải, lỗi và hoàn thành theo tính năng."),
         ("Chốt quy tắc và cách nghiệm thu", "Ghi màu, font, khoảng cách, bố cục thích ứng và tiêu chí so sánh."),
     ],
@@ -60,7 +60,7 @@ WORK_STEPS = {
         ("Xác định cách kiểm tra và khôi phục", "Nêu cách chứng minh tính đúng và khôi phục khi cần."),
     ],
     "plan": [
-        ("Chia lát chức năng", "Mỗi công việc tạo ra một kết quả có thể nhận và kiểm tra."),
+        ("Chia lát chức năng", "Ưu tiên một trải nghiệm cốt lõi hoàn chỉnh để dùng thử sớm, rồi mở rộng thành các phần kiểm tra được."),
         ("Sắp xếp phụ thuộc", "Xác định thứ tự thực hiện, tránh vòng lặp phụ thuộc."),
         ("Viết hợp đồng công việc", "Ghi đầu vào, phạm vi, yêu cầu liên quan và tiêu chí hoàn tất."),
         ("Chọn cách kiểm chứng", "Dùng kiểm tra phù hợp và kiểm chứng trình duyệt khi trải nghiệm yêu cầu."),
@@ -75,7 +75,7 @@ WORK_STEPS = {
     "verify": [
         ("Lập đối chiếu yêu cầu", "Liên kết từng tiêu chí nghiệm thu với cách kiểm chứng."),
         ("Kiểm tra kết quả đã ghi", "Đọc kết quả thực tế và xác định đúng phiên bản sản phẩm."),
-        ("Đánh giá trải nghiệm", "So sánh giao diện với mốc thiết kế và thử hành trình; ghi thiếu bằng chứng khi chưa thể quan sát."),
+        ("Đánh giá trải nghiệm", "Đối chiếu mục tiêu chất lượng, điểm khác biệt, mốc thiết kế và hành trình thực tế; ghi điều chưa kiểm chứng."),
         ("Ghi sai lệch và hạn chế", "Phân biệt lỗi, giới hạn được chấp nhận và phần chưa kiểm chứng."),
         ("Kết luận nghiệm thu", "Kết luận dựa trên bằng chứng, giữ nguyên tiêu chí đã chốt."),
     ],
@@ -130,7 +130,9 @@ def defaults(model=None, effort=None):
             "model": model or ("gpt-6-astra" if stage in {"analysis", "design", "architecture"} else "gpt-6.1-sol"),
             "effort": effort or ("high" if stage == "review" else "medium"),
         } for stage in STAGES + ["review", "project_setup"]},
-        "gates": ["handoff"],
+        "executor": "codex-desktop", "dashboard_read_only": True,
+        "collaborative_product": True, "experience_checkpoint_required": True,
+        "gates": ["analysis", "design", "handoff"], "task_gates": [],
         "max_attempts": 2, "turn_timeout_seconds": 900,
         "max_turn_tokens": None, "max_cycle_tokens": None,
         "network_access": True, "verification_commands": [],
@@ -308,3 +310,42 @@ def validate_local_plan(plan, services):
     require(isinstance(delivery.get("deferred"), list) and all(isinstance(item, str) and item.strip() for item in delivery["deferred"]),
             "Plan cần ghi rõ những việc phát hành để giai đoạn sau.")
     return delivery
+
+
+def validate_product_direction(value, requirement_ids):
+    for key in ["users", "problem", "desired_experience", "differentiation"]:
+        require(isinstance(value.get(key), str) and value[key].strip(), "Hướng sản phẩm cần người dùng, vấn đề, trải nghiệm và điểm khác biệt rõ ràng.")
+    options = value.get("options")
+    require(isinstance(options, list) and options and all(isinstance(item, dict) and
+            all(isinstance(item.get(key), str) and item[key].strip() for key in ["name", "description", "tradeoffs"])
+            for item in options), "Cần phương án sản phẩm và đánh đổi để bạn lựa chọn.")
+    names = [item["name"] for item in options]
+    require(len(set(names)) == len(names) and value.get("recommendation") in names, "Đề xuất cần tham chiếu một phương án cụ thể.")
+    targets = value.get("quality_targets")
+    require(isinstance(targets, list) and targets and all(isinstance(item, dict) and
+            isinstance(item.get("description"), str) and item["description"].strip() and
+            isinstance(item.get("verification"), str) and item["verification"].strip() and
+            isinstance(item.get("requirement"), str) and item["requirement"] in requirement_ids
+            for item in targets), "Mục tiêu chất lượng cần liên kết yêu cầu và cách đánh giá thực tế.")
+    require(isinstance(value.get("open_questions"), list) and all(isinstance(q, str) and q.strip() for q in value["open_questions"]),
+            "Cần ghi rõ các câu hỏi chưa chốt.")
+
+
+def validate_experience_checkpoint(plan):
+    checkpoint = plan.get("experience_checkpoint")
+    require(isinstance(checkpoint, dict) and isinstance(checkpoint.get("task_id"), str), "Kế hoạch cần mốc dùng thử trải nghiệm cốt lõi.")
+    tasks = {item["id"]: item for item in plan["tasks"]}
+    require(checkpoint["task_id"] in tasks and isinstance(checkpoint.get("goal"), str) and checkpoint["goal"].strip() and
+            isinstance(checkpoint.get("evaluation"), list) and checkpoint["evaluation"] and
+            all(isinstance(item, str) and item.strip() for item in checkpoint["evaluation"]), "Mốc dùng thử cần công việc, mục tiêu và cách đánh giá rõ ràng.")
+    # Every expansion must wait for the core experience; independent service setup remains unaffected.
+    anchor = checkpoint["task_id"]
+    def ancestors(tid):
+        result = set(tasks[tid]["depends_on"])
+        for dep in list(result):
+            result |= ancestors(dep)
+        return result
+    prerequisites = ancestors(anchor)
+    require(all(tid == anchor or tid in prerequisites or anchor in ancestors(tid) for tid in tasks),
+            "Các phần mở rộng cần phụ thuộc mốc trải nghiệm cốt lõi đã được bạn chốt.")
+    return checkpoint

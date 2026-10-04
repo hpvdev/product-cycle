@@ -17,3 +17,7 @@ header .execution .row>div:first-child{min-width:0;flex:1}#evidence-viewer[open]
 @media(min-width:981px){.workflow-section>section:first-child{position:sticky;top:20px;max-height:calc(100vh - 40px);overflow:auto;scrollbar-gutter:stable}}
 .dashboard-grid>.panel,.columns>.panel,.metric,.document-card{min-width:0}@media(max-width:760px){.dashboard-grid{grid-template-columns:minmax(0,1fr)}.table-scroll{max-width:100%}}
 .token-summary{font-size:12px;color:var(--muted);margin:8px 0 0}.token-summary strong{font-size:16px;font-variant-numeric:tabular-nums;color:var(--blue);margin-left:4px}
+
+.execution-report{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}.execution-report summary{cursor:pointer;font-size:12px;font-weight:650}.execution-report-body{max-height:240px;overflow:auto;line-height:1.6}.execution-report-body p{margin:8px 0}.execution-report-body ul,.execution-report-body ol{padding-left:20px;font-size:12px}.execution-next{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:10px}.execution-next button,.execution-next a{font-size:12px}
+
+body[data-read-only="true"] #run,body[data-read-only="true"] #pause{display:none}

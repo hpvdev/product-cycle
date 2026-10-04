@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -99,7 +100,9 @@ class Store:
         config.update({"name": name, "mode": mode, "created_at": now()})
         if mode == "demo":
             config.update(service_setup_required=False, project_setup_required=False, bootstrap_required=False,
-                          gates=["analysis", "design", "plan", "handoff"])
+                          gates=["analysis", "design", "plan", "handoff"],
+                          executor="codex-app-server", dashboard_read_only=False,
+                          collaborative_product=False, experience_checkpoint_required=False)
         write_json(root / "config.json", config)
         if preparation:
             preparation["prepared_at"] = now()
@@ -388,7 +391,9 @@ class Store:
                         all(isinstance(path, str) and path in declared for path in step["artifacts"]),
                         "Mỗi bước nhỏ cần kết quả và đầu ra có thể kiểm chứng.")
         # Existing sealed results keep their original contract until reopened.
-        filenames = FILES.get(task["role"], [])
+        filenames = list(FILES.get(task["role"], []))
+        if task["stage"] == "analysis" and self.config.get("collaborative_product"):
+            filenames += ["product-direction.json"]
         if self.config.get("service_setup_required") and task["stage"] == "architecture":
             filenames = filenames + ["services.json"]
         if self.config.get("project_setup_required") and task["stage"] == "architecture":
@@ -409,10 +414,16 @@ class Store:
                 require(isinstance(reference, str) and reference in {item["path"] for item in result["artifacts"]}, "Cần đầu ra trực quan đã đăng ký để duyệt thiết kế.")
                 require(self.safe_path(reference).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".html", ".pdf", ".svg"}, "Mốc thiết kế cần ảnh, prototype hoặc tài liệu trực quan.")
         if task["stage"] == "analysis":
-            validate_requirements(json_object(directory / "requirements.json"))
+            requirements = validate_requirements(json_object(directory / "requirements.json"))
+            if self.config.get("collaborative_product"):
+                from .contracts import validate_product_direction
+                validate_product_direction(json_object(directory / "product-direction.json"), requirements)
         if task["stage"] == "plan":
             plan = json_object(directory / "plan.json")
             validate_plan(plan, self.requirement_ids())
+            if self.config.get("experience_checkpoint_required"):
+                from .contracts import validate_experience_checkpoint
+                validate_experience_checkpoint(plan)
             if self.config.get("service_setup_required"):
                 validate_local_plan(plan, self.services())
         if task["stage"] == "architecture" and self.config.get("service_setup_required"):
@@ -562,10 +573,26 @@ class Store:
             return plan.get("verification_commands", [])
         return []
 
+    def owner_gate(self, task):
+        return task["stage"] in self.config["gates"] or task["id"] in self.config.get("task_gates", [])
+
+    def owner_input(self, tid, actor, note):
+        task = self.task(tid)
+        require(task["stage"] in {"analysis", "design"}, "Trao đổi định hướng thuộc bước phân tích hoặc thiết kế.")
+        require(task["status"] != "done", "Mở lại bước đã chốt trước khi thay đổi định hướng.")
+        require(actor.strip() and note.strip(), "Cần ghi người phản hồi và nội dung trao đổi.")
+        self.event(tid, "owner.input", {"revision": task["revision"], "actor": actor, "note": note})
+
+    def owner_inputs(self, tid):
+        task = self.task(tid)
+        return [dict(json.loads(row["data"]), recorded_at=row["created_at"])
+                for row in self.db.execute("SELECT data,created_at FROM events WHERE task_id=? AND type='owner.input' ORDER BY id", (tid,))
+                if json.loads(row["data"]).get("revision") == task["revision"]]
+
     def review_finished(self, tid, aid, review):
         self.validate_review(tid, review)
         self.attempt_update(aid, status="completed", ended_at=now())
-        status = {"approve": "awaiting_approval" if self.task(tid)["stage"] in self.config["gates"] else "done",
+        status = {"approve": "awaiting_approval" if self.owner_gate(self.task(tid)) else "done",
                   "rework": "rework", "blocked": "blocked"}[review["decision"]]
         self.update(tid, review=review, status="reviewing" if status == "done" else status,
                     reason=None if status in {"done", "awaiting_approval"} else review["summary"])
@@ -577,6 +604,9 @@ class Store:
         task = self.task(tid)
         self.validate_outputs(tid, task["result"])
         self.validate_review(tid, task["review"])
+        if task["stage"] == "analysis" and self.config.get("collaborative_product"):
+            direction = self.sealed_document(tid, "product-direction.json")
+            require(not direction["open_questions"], "Còn câu hỏi định hướng chưa chốt; trao đổi trong Codex và cập nhật phân tích trước khi chấp nhận.")
         # Gate decisions are tied to the exact files reviewed, not mutable filenames.
         for item in self.current_evidence(tid):
             if item["kind"] == "artifact":
@@ -615,6 +645,8 @@ class Store:
             config = self.config
             config["verification_commands"] = plan.get("verification_commands", [])
             config["browser_required"] = plan.get("browser_required", False)
+            checkpoint = plan.get("experience_checkpoint")
+            config["task_gates"] = [checkpoint["task_id"]] if self.config.get("experience_checkpoint_required") else []
             write_json(self.root / "config.json", config)
         self.update(tid, status="done", accepted_at=now())
         self.event(tid, "task.accepted", {"revision": task["revision"]})
@@ -661,9 +693,55 @@ class Store:
                 if task["status"] in {"running", "reviewing"}:
                     self.db.execute("UPDATE tasks SET status='blocked',reason=? WHERE id=?", ("Phiên trước bị gián đoạn; kiểm tra thay đổi thực tế rồi mở lại công việc.", task["id"]))
                     recovered.append(task["id"])
-            self.db.execute("UPDATE attempts SET status='interrupted',ended_at=? WHERE status='running'", (now(),))
+            self.db.execute("UPDATE attempts SET status='interrupted',ended_at=? WHERE status IN ('running','queued')", (now(),))
         self.event(None, "cycle.recovered", {"tasks": recovered})
         return recovered
+
+    def latest_continuation(self, task, attempt):
+        """Read sealed chat reports in turn order, not their ingestion order."""
+        from datetime import datetime
+
+        reports = []
+        records = self.current_evidence(task["id"])
+        for record in records:
+            if record["attempt_id"] != attempt["id"] or not Path(record["source"]).name.startswith("continuation-"):
+                continue
+            try:
+                self.intact([record])
+                report = json_object(self.root / record["object_path"])
+                if report.get("thread_id") != attempt["thread_id"] or report.get("phase") != attempt["phase"]:
+                    continue
+                turn_id = report["turn_id"]
+                stamp = report.get("completed_at")
+                if not isinstance(stamp, (int, float)):
+                    try:
+                        turn_uuid = uuid.UUID(turn_id)
+                        require(turn_uuid.version == 7, "Expected a time-ordered turn ID")
+                        stamp = (turn_uuid.int >> 80) / 1000
+                    except (ValueError, WorkflowError):
+                        stamp = datetime.fromisoformat(report["received_at"].replace("Z", "+00:00")).timestamp()
+                messages = report["messages"]
+                if not isinstance(messages, list) or not messages or not all(isinstance(text, str) for text in messages):
+                    continue
+                reports.append((stamp, turn_id, record, messages[-1]))
+            except (WorkflowError, ValueError, KeyError, TypeError, OSError):
+                continue
+        if not reports:
+            return None
+        _, turn_id, record, message = max(reports, key=lambda item: item[:2])
+        try:
+            json.loads(message)
+        except ValueError:
+            pass
+        else:
+            return None  # Structured outputs are shown through the task's criteria, not raw JSON.
+        linked = []
+        for link in re.findall(r'\]\(<?([^\n)]+)>?\)', message):
+            path = (self.project / link.strip().strip("<>")).resolve()
+            item = next((item for item in reversed(records) if self.project / item["source"] == path), None)
+            if item and Path(item["source"]).suffix.lower() in {".md", ".html", ".pdf"} and item["id"] not in linked:
+                linked.append(item["id"])
+        return {"turn_id": turn_id, "evidence_id": record["id"], "message": message, "reports": linked}
 
     def execution_status(self, tasks, events):
         import fcntl
@@ -681,25 +759,67 @@ class Store:
         task = next((task for task in tasks if task["status"] in {"running", "reviewing"}), None)
         row = self.db.execute("SELECT * FROM attempts ORDER BY rowid DESC LIMIT 1").fetchone()
         attempt = dict(row) if row else None
+        observed = next((event for event in events if attempt and event["type"] == "thread.observed" and
+                         event["data"].get("attempt_id") == attempt["id"]), None)
+        external_active = bool(observed and observed["data"].get("active") and
+                               (datetime.now(timezone.utc) - datetime.fromisoformat(observed["created_at"].replace("Z", "+00:00"))).total_seconds() < 45)
+        native = self.config.get("executor", "codex-app-server") == "codex-desktop"
+        if native:
+            active = external_active  # The read-only watcher lock is not proof of AI activity.
+        if external_active and not active:
+            task = next((item for item in tasks if item["id"] == attempt["task_id"]), None)
+            active = True
         activity = next((event for event in events if attempt and event["data"].get("attempt_id") == attempt["id"]
-                         and event["type"] in {"runtime.activity", "check.started", "check.completed"}), None)
+                         and event["type"] in {"runtime.activity", "runtime.retry", "thread.synced", "check.started", "check.completed"}), None)
         stamp = activity["created_at"] if activity else (attempt["ended_at"] or attempt["started_at"]) if attempt else None
+        failure_is_latest = bool(not active and attempt and attempt["status"] in {"failed", "interrupted"} and
+                                 attempt["ended_at"] and (not stamp or attempt["ended_at"] >= stamp))
+        if failure_is_latest:
+            stamp = attempt["ended_at"]
         age = max(0, int((datetime.now(timezone.utc) - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds())) if stamp else None
         phase = "check" if active and activity and activity["type"] == "check.started" else attempt["phase"] if active and attempt and attempt["status"] == "running" else "controller" if active else None
+        if active and activity and activity["type"] == "runtime.retry" and attempt and attempt["status"] == "running":
+            phase = "retry"
+        if external_active:
+            phase = attempt["phase"]
+            stamp = observed["created_at"]
+            age = max(0, int((datetime.now(timezone.utc) - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds()))
         blocked = next((item for item in tasks if item["status"] == "blocked"), None)
         status = "running" if active else "interrupted" if task and attempt and attempt["status"] == "running" else "blocked" if blocked else "idle"
+        if native and attempt and attempt["status"] == "queued":
+            status, active, phase = "queued", False, attempt["phase"]
+            task = next((item for item in tasks if item["id"] == attempt["task_id"]), None)
+        elif native and not active and task and attempt and attempt["status"] == "running":
+            status = "waiting_native"
         activity_names = {"commandExecution": "Đang chạy công cụ", "fileChange": "Đang cập nhật tệp",
                           "agentMessage": "Đang cập nhật kết quả", "reasoning": "Đang xử lý công việc",
                           "mcpToolCall": "Đang dùng công cụ", "webSearch": "Đang tìm thông tin"}
         description = activity_names.get(activity["data"].get("item_type"), "Đã nhận cập nhật từ AI") if activity else None
         if activity and activity["type"].startswith("check."):
             description = "Đang chạy kiểm tra theo kế hoạch" if activity["type"] == "check.started" else "Đã nhận kết quả kiểm tra"
-        return {"status": status, "active": active, "backend": "codex-app-server", "phase": phase,
+        if activity and activity["type"] == "runtime.retry":
+            description = "Model quá tải; đang chờ thử lại với model đã chọn"
+        if activity and activity["type"] == "thread.synced":
+            description = "Đã đồng bộ kết quả làm tiếp trong Codex"
+        if external_active:
+            description = "Chat Codex đang làm việc; chờ kết quả để đồng bộ"
+        if failure_is_latest:
+            description = "Phiên thực thi đã dừng; cần xử lý để tiếp tục"
+        if status == "queued":
+            description = "Công việc đã chuẩn bị; chờ thực hiện trong Codex"
+        elif status == "waiting_native":
+            description = "Đã gắn chat Codex; chưa nhận được xác nhận đang chạy"
+        current = task or blocked
+        continuation = self.latest_continuation(current, attempt) if current and attempt and attempt["task_id"] == current["id"] else None
+        waiting_for_verification = bool(status == "blocked" and current and current["stage"] == "verify" and
+                                       (current["reason"] or "").startswith(("Đã nhận kết quả làm tiếp trong Codex.",
+                                                                              "Còn thiếu bằng chứng nghiệm thu trình duyệt")))
+        return {"status": status, "active": active, "backend": "codex-desktop" if native or external_active else "codex-app-server", "phase": phase,
                 "task_id": task["id"] if task else blocked["id"] if blocked else None,
                 "task_title": task["title"] if task else blocked["title"] if blocked else None,
-                "reason": blocked["reason"] if not active and blocked else None,
+                "reason": current["reason"] if not active and current and current["status"] == "blocked" else None,
                 "attempt": attempt, "last_activity_at": stamp, "seconds_since_activity": age,
-                "activity": description}
+                "activity": description, "continuation": continuation, "waiting_for_verification": waiting_for_verification}
 
     def snapshot(self, full_history=False):
         from .progress import task_progress, stage_progress, development_progress, service_progress
@@ -716,6 +836,10 @@ class Store:
             task["evidence"] = history
             task["attempt_history"] = [dict(row) for row in self.db.execute("SELECT * FROM attempts WHERE task_id=? ORDER BY rowid", (task["id"],))]
             task["steps"] = task_progress(task, tasks, config, progress_events, decisions, self.root)
+            task["owner_inputs"] = self.owner_inputs(task["id"])
+            task["owner_gate"] = self.owner_gate(task)
+            if task["stage"] == "analysis":
+                task["product_direction"] = self.sealed_document(task["id"], "product-direction.json") if any(Path(item["source"]).name == "product-direction.json" for item in self.current_evidence(task["id"])) else None
             if task["stage"] == "design":
                 current = self.current_evidence(task["id"])
                 baseline = next((item for item in current if Path(item["source"]).name == "design-baseline.json"), None)
@@ -755,6 +879,9 @@ class Store:
                              "acceptance_status": self.task("handoff")["status"],
                              "release_deferred": config.get("release_deferred", True)},
                 "tokens": self.db.execute("SELECT SUM(tokens) FROM attempts").fetchone()[0],
+                "token_tracking": {"complete": not any(a[0] is None for a in self.db.execute("SELECT tokens FROM attempts")),
+                                   "work": self.db.execute("SELECT SUM(tokens) FROM attempts WHERE phase='work'").fetchone()[0],
+                                   "review": self.db.execute("SELECT SUM(tokens) FROM attempts WHERE phase='review'").fetchone()[0]},
                 "decisions": decisions}
 
     def package(self, destination):

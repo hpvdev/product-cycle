@@ -8,9 +8,27 @@ import signal
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 from .contracts import WorkflowError, require
 from . import __version__
+
+
+class ModelCapacityError(WorkflowError):
+    """Provider capacity is temporary, not a product or permission blocker."""
+
+
+def provider_error(error):
+    error = error or {}
+    data = error.get("data")
+    info = error.get("codexErrorInfo") or (data.get("codexErrorInfo") if isinstance(data, dict) else None)
+    message = error.get("message", "")
+    if "already has an active writer" in message.lower():
+        return WorkflowError("Chat này đang được Codex quản lý nên kết nối riêng chưa thể tiếp tục. "
+                             "Mở chat trong Codex để làm tiếp; dashboard sẽ đồng bộ kết quả khi phiên kết thúc.")
+    if info in ("serverOverloaded", "flexUnavailable") or info is None and "selected model is at capacity" in message.lower():
+        return ModelCapacityError("Model đang quá tải tạm thời. Hệ thống sẽ thử lại với model đã chọn.")
+    return WorkflowError(message or "Phiên Codex chưa hoàn thành. Kiểm tra nhật ký để tiếp tục.")
 
 
 class CodexClient:
@@ -78,7 +96,7 @@ class CodexClient:
                 self.notifications.append(message)
         response = self.responses.pop(rid)
         if "error" in response:
-            raise WorkflowError("Codex từ chối " + method + ": " + str(response["error"].get("message", "Unknown error")))
+            raise provider_error(response["error"])
         return response.get("result", {})
 
     def initialize(self, deadline):
@@ -86,6 +104,16 @@ class CodexClient:
                                               "capabilities": {"experimentalApi": True}}, deadline)
         self.send("initialized", {}, request=False)
         return result
+
+    def read_thread(self, thread_id, timeout=30):
+        deadline = time.monotonic() + timeout
+        self.initialize(deadline)
+        thread = self.request("thread/read", {"threadId": thread_id, "includeTurns": True}, deadline)["thread"]
+        # Read only the usage counters in the authoritative local session, never resume a writer.
+        usage = local_thread_usage(thread)
+        if usage is not None:
+            thread["usage_total"] = usage
+        return thread
 
     def run(self, project, prompt, model, effort, schema, readonly=False, network=False,
             timeout=900, max_tokens=None, thread_id=None, title=None):
@@ -128,7 +156,8 @@ class CodexClient:
                         raise WorkflowError("Phiên AI đã vượt ngân sách token.")
                 if method == "turn/completed" and params.get("turn", {}).get("id") == turn_id:
                     status = params["turn"]["status"]
-                    require(status == "completed", "Phiên Codex kết thúc với trạng thái " + status + ".")
+                    if status != "completed":
+                        raise provider_error(params["turn"].get("error") or {"message": "Phiên Codex kết thúc với trạng thái " + status + "."})
                     raw = next(reversed(texts.values()), "")
                     try:
                         result = json.loads(raw)
@@ -164,3 +193,37 @@ class CodexClient:
 
     def __exit__(self, *_):
         self.close()
+
+
+def local_thread_usage(thread):
+    path = thread.get("path")
+    if not isinstance(path, str):
+        return None
+    home = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))).expanduser().resolve()
+    path = Path(path).resolve()
+    if not path.is_relative_to(home / "sessions") or not path.is_file() or path.suffix != ".jsonl":
+        return None
+    identity, total = False, None
+    try:
+        with path.open() as lines:
+            for line in lines:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                payload = row.get("payload", {})
+                if not isinstance(payload, dict):
+                    continue
+                if row.get("type") == "session_meta":
+                    identity = payload.get("id") == thread.get("id") and Path(payload.get("cwd", "")).resolve() == Path(thread.get("cwd", "")).resolve()
+                    if not identity:
+                        return None
+                elif row.get("type") == "event_msg" and payload.get("type") == "token_count":
+                    info = payload.get("info")
+                    counts = info.get("total_token_usage") if isinstance(info, dict) else None
+                    value = counts.get("total_tokens") if isinstance(counts, dict) else None
+                    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                        total = value
+    except OSError:
+        return None
+    return total if identity else None

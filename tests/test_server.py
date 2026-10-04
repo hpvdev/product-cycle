@@ -72,6 +72,24 @@ class DashboardTests(unittest.TestCase):
             urlopen(request, timeout=5)
         self.assertEqual(caught.exception.code, 403)
 
+    def test_read_only_dashboard_rejects_mutation_even_with_valid_token(self):
+        from product_cycle.store import write_json
+        with patch.dict(os.environ, self.env):
+            store = Store(self.base / "project")
+            config = store.config
+            updated = dict(config, dashboard_read_only=True)
+            write_json(store.root / "config.json", updated)
+            try:
+                request = Request(self.url + "/api/pause", data=b"{}", headers={
+                    "Content-Type": "application/json", "X-Product-Cycle-Token": self.state["control_token"]})
+                with self.assertRaises(HTTPError) as caught:
+                    urlopen(request, timeout=5)
+                self.assertEqual(caught.exception.code, 400)
+                self.assertEqual(store.snapshot()["state"], "active")
+            finally:
+                write_json(store.root / "config.json", config)
+                store.close()
+
     def test_real_gate_decision_through_dashboard(self):
         payload = {"task": "analysis", "action": "approve", "actor": "Test operator", "note": "Accepted fixture scope"}
         request = Request(self.url + "/api/decision", data=json.dumps(payload).encode(),

@@ -7,11 +7,12 @@ import sys
 from pathlib import Path
 
 from .contracts import WorkflowError, require
-from .runner import execute, review_task, run_cycle
+from .runner import execute, review_task, run_cycle, sync_task, continue_task
 from .server import serve
 from .store import Store, fingerprint, now, write_json, runner_lock, state_root
 from .bootstrap import prepare_project, repository_state
 from .installer import install_skills
+from . import desktop
 
 
 def parser():
@@ -21,18 +22,31 @@ def parser():
     init.add_argument("--project", required=True)
     init.add_argument("--brief", required=True, help="File mô tả mục tiêu sản phẩm")
     init.add_argument("--name", required=True)
+    init.add_argument("--executor", choices=["codex-desktop", "codex-app-server"], default="codex-desktop")
     init.add_argument("--model", help="Dùng model này cho mọi bước thay cho cấu hình theo vai trò")
     init.add_argument("--max-turn-tokens", type=int, help="Ngân sách token mỗi phiên; mặc định chỉ theo dõi")
     init.add_argument("--max-cycle-tokens", type=int, help="Ngân sách token toàn quy trình; mặc định chỉ theo dõi")
     init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"],
                       help="Dùng effort này cho mọi bước thay cho cấu hình theo vai trò")
-    for name in ["bootstrap", "install-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "serve", "package", "browser-evidence", "judge"]:
+    for name in ["bootstrap", "install-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress"]:
         cmd = sub.add_parser(name)
         cmd.add_argument("--project", required=True)
-        if name in {"work", "review", "decide", "reopen", "browser-evidence", "judge"}:
+        if name in {"work", "review", "decide", "reopen", "browser-evidence", "judge", "sync", "continue", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress"}:
             cmd.add_argument("--task", required=True)
+        if name == "configure":
+            cmd.add_argument("--executor", choices=["codex-desktop", "codex-app-server"], required=True)
+        if name == "owner-input":
+            cmd.add_argument("--actor", required=True)
+            cmd.add_argument("--note", required=True)
+        if name in {"desktop-bind", "desktop-submit", "desktop-progress"}:
+            cmd.add_argument("--attempt", required=True)
+        if name == "desktop-bind":
+            cmd.add_argument("--thread", required=True)
+        if name in {"desktop-submit", "desktop-progress"}:
+            cmd.add_argument("--file", required=True)
         if name == "run":
             cmd.add_argument("--max-tasks", type=int, default=50)
+            cmd.add_argument("--continue-blocked", action="store_true", help="Đồng bộ chat Codex và khôi phục các công việc bị chặn trước khi chạy tiếp")
         if name == "serve":
             cmd.add_argument("--port", type=int, default=8787)
         if name in {"decide", "reopen", "browser-evidence"}:
@@ -127,7 +141,7 @@ def main(argv=None):
                 require(value is None or value > 0, "Ngân sách token phải là số nguyên dương.")
             store = Store.create(args.project, Path(args.brief).read_text(), args.name, args.model, args.effort)
             config = store.config
-            config.update(max_turn_tokens=args.max_turn_tokens, max_cycle_tokens=args.max_cycle_tokens)
+            config.update(max_turn_tokens=args.max_turn_tokens, max_cycle_tokens=args.max_cycle_tokens, executor=args.executor)
             write_json(store.root / "config.json", config)
             print("Đã khởi tạo: " + str(store.root))
             return
@@ -137,13 +151,46 @@ def main(argv=None):
         if args.command == "status":
             print(json.dumps(store.snapshot(), ensure_ascii=False, indent=2))
         elif args.command == "run":
-            run_cycle(store, args.max_tasks)
+            outcome = run_cycle(store, args.max_tasks, continue_blocked=args.continue_blocked)
+            if outcome:
+                print(json.dumps(outcome, ensure_ascii=False, indent=2))
         elif args.command == "work":
             with runner_lock(store):
-                execute(store, args.task)
+                outcome = execute(store, args.task)
+                if outcome:
+                    print(json.dumps(outcome, ensure_ascii=False, indent=2))
         elif args.command == "review":
             with runner_lock(store):
-                review_task(store, args.task)
+                outcome = review_task(store, args.task)
+                if outcome:
+                    print(json.dumps(outcome, ensure_ascii=False, indent=2))
+        elif args.command == "configure":
+            with runner_lock(store):
+                require(not store.db.execute("SELECT id FROM attempts WHERE status IN ('running','queued')").fetchone(),
+                        "Kết thúc hoặc khôi phục phiên đang chạy trước khi đổi nơi thực thi.")
+                config = store.config
+                config.update(executor=args.executor, dashboard_read_only=True)
+                write_json(store.root / "config.json", config)
+                store.event(None, "executor.configured", {"executor": args.executor})
+            print("Đã cập nhật nơi thực thi. Lịch sử và quyết định trước đây được giữ nguyên.")
+        elif args.command == "owner-input":
+            with runner_lock(store):
+                store.owner_input(args.task, args.actor, args.note)
+        elif args.command in {"desktop-bind", "desktop-submit", "desktop-progress"}:
+            with runner_lock(store):
+                if args.command == "desktop-bind":
+                    outcome = desktop.bind(store, args.task, args.attempt, args.thread)
+                elif args.command == "desktop-submit":
+                    outcome = desktop.submit(store, args.task, args.attempt, args.file)
+                else:
+                    attempt = desktop.latest(store, args.task)
+                    require(desktop.enabled(store) and attempt and attempt["id"] == args.attempt and attempt["status"] == "running",
+                            "Phiên hiện tại chưa sẵn sàng ghi tiến độ.")
+                    plan = json.loads(store.safe_path(args.file).read_text())
+                    require(isinstance(plan, list), "Cần danh sách tiến độ từng bước.")
+                    store.step_progress(args.attempt, plan)
+                    outcome = {"ok": True}
+            print(json.dumps(outcome, ensure_ascii=False, indent=2))
         elif args.command == "decide":
             with runner_lock(store):
                 store.decide(args.task, args.action, args.actor, args.note)
@@ -155,6 +202,14 @@ def main(argv=None):
         elif args.command == "recover":
             with runner_lock(store):
                 print(json.dumps(store.recover()))
+        elif args.command in {"sync", "continue"}:
+            require(store.config["mode"] == "live", "Dữ liệu minh họa không có phiên Codex thực tế để khôi phục.")
+            with runner_lock(store):
+                action = sync_task if args.command == "sync" else continue_task
+                outcome = action(store, args.task)
+                print(json.dumps(outcome, ensure_ascii=False))
+            if args.command == "continue" and not outcome.get("active") and not desktop.enabled(store):
+                run_cycle(store)
         elif args.command == "package":
             with runner_lock(store):
                 print(store.package(args.output))

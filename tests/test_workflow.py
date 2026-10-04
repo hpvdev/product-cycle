@@ -12,6 +12,8 @@ from product_cycle.fixtures import complete_fixture, prepare_plan
 from product_cycle.runner import execute, prompt_for, run_checks, run_cycle, run_phase, thread_title
 from product_cycle.store import Store, fingerprint, digest, runner_lock, write_json
 from product_cycle.bootstrap import prepare_project, repository_state, git
+from product_cycle.codex import ModelCapacityError
+from product_cycle.runner import sync_task, continue_task
 
 
 class WorkflowTests(unittest.TestCase):
@@ -81,6 +83,20 @@ class WorkflowTests(unittest.TestCase):
         plan["tasks"][0]["browser_required"] = True
         with self.assertRaises(WorkflowError):
             validate_plan(plan, {"R1"})
+
+    def test_execution_failure_supersedes_older_activity_but_not_new_chat_progress(self):
+        aid, _ = self.store.begin("analysis", "work")
+        self.store.attempt_update(aid, status="failed", ended_at="2026-10-04T04:54:29Z")
+        self.store.update("analysis", status="blocked", reason="Connection unavailable")
+        event = {"type": "thread.synced", "data": {"attempt_id": aid}, "created_at": "2026-10-04T04:23:53Z"}
+        execution = self.store.execution_status(self.store.tasks(), [event])
+        self.assertEqual(execution["last_activity_at"], "2026-10-04T04:54:29Z")
+        self.assertIn("đã dừng", execution["activity"])
+        self.assertFalse(execution["active"])
+        event["created_at"] = "2026-10-04T05:00:00Z"
+        execution = self.store.execution_status(self.store.tasks(), [event])
+        self.assertEqual(execution["last_activity_at"], event["created_at"])
+        self.assertEqual(execution["activity"], "Đã đồng bộ kết quả làm tiếp trong Codex")
 
     def test_real_check_is_executed_and_versioned(self):
         prepare_plan(self.store, self.plan([sys.executable, "-c", "print('observed pass')"]))
@@ -502,10 +518,198 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.store.task("T1")["status"], "done")
         self.assertEqual(self.store.task("T2")["status"], "pending")
 
+    def test_run_continues_unrelated_features_after_a_feature_blocker(self):
+        plan = self.plan()
+        plan["tasks"].append(dict(plan["tasks"][0], id="T2", title="Independent feature"))
+        prepare_plan(self.store, plan)
+        def fixture_execute(store, tid, factory):
+            complete_fixture(store, tid, blocker="Need input" if tid == "T1" else None)
+            if tid == "T1":
+                raise WorkflowError("Need input")
+        with patch("product_cycle.runner.execute", side_effect=fixture_execute):
+            run_cycle(self.store, max_tasks=2)
+        self.assertEqual(self.store.task("T1")["status"], "blocked")
+        self.assertEqual(self.store.task("T2")["status"], "done")
+        self.assertIsNone(self.store.next_task())
+
+    def continuation_fixture(self, structured=False, active=False):
+        prepare_plan(self.store)
+        task = complete_fixture(self.store, "T1", blocker="Interrupted")
+        aid = "T1:r1:a1:work"
+        self.store.attempt_update(aid, thread_id="worker-thread", turn_id="original-turn")
+        report = self.base / "project" / "follow-up.md"
+        report.write_text("Observed some behavior; other criteria are still pending.")
+        result = dict(task["result"], blocker=None)
+        message = json.dumps(result) if structured else "Work continued. [Report](" + str(report) + ")"
+        thread = {"id": "worker-thread", "cwd": str(self.store.project), "turns": [
+            {"id": "original-turn", "status": "completed", "items": []},
+            {"id": "follow-up-turn", "status": "inProgress" if active else "completed",
+             "items": [{"type": "agentMessage", "phase": "final_answer", "text": message}]}]}
+        from unittest.mock import MagicMock
+        factory = MagicMock()
+        factory.return_value.__enter__.return_value.read_thread.return_value = thread
+        return factory, thread
+
+    def test_plain_chat_completion_is_synced_once_without_claiming_acceptance(self):
+        factory, _ = self.continuation_fixture()
+        self.assertTrue(sync_task(self.store, "T1", factory)["updated"])
+        self.assertFalse(sync_task(self.store, "T1", factory)["updated"])
+        self.assertEqual(self.store.task("T1")["status"], "blocked")
+        self.assertTrue(any(e["source"] == "follow-up.md" for e in self.store.current_evidence("T1")))
+        self.assertFalse(any(e["kind"] == "browser" for e in self.store.current_evidence("T1")))
+        factory.return_value.__enter__.return_value.run.assert_not_called()
+
+    def test_sync_does_not_backfill_older_turns_as_new_progress(self):
+        factory, thread = self.continuation_fixture()
+        thread["turns"].insert(1, {"id": "older-turn", "status": "completed", "items": [
+            {"type": "agentMessage", "text": "Outdated blocker"}]})
+        self.assertTrue(sync_task(self.store, "T1", factory)["updated"])
+        self.assertFalse(sync_task(self.store, "T1", factory)["updated"])
+        execution = self.store.snapshot()["execution"]
+        self.assertEqual(execution["continuation"]["turn_id"], "follow-up-turn")
+        self.assertIn("Work continued", execution["continuation"]["message"])
+        self.assertEqual(len(execution["continuation"]["reports"]), 1)
+        self.assertFalse(execution["waiting_for_verification"])
+
+    def test_latest_chat_report_uses_turn_order_not_ingestion_order(self):
+        factory, _ = self.continuation_fixture()
+        attempt = dict(self.store.db.execute("SELECT * FROM attempts ORDER BY rowid DESC LIMIT 1").fetchone())
+        for turn_id, message in [("01a10503-0e79-7033-90ae-724e5dfb7d44", "Latest observations; touch still pending."),
+                                 ("01a104fd-e758-7f42-8c85-094195241a1e", "Outdated: browser unavailable.")]:
+            path = Path(attempt["directory"]) / ("continuation-" + turn_id + ".json")
+            write_json(path, {"thread_id": attempt["thread_id"], "turn_id": turn_id, "phase": "work",
+                              "messages": [message], "received_at": "2026-10-04T04:23:53Z"})
+            self.store.record_file("T1", str(path.relative_to(self.store.project)), "Chat report", attempt_id=attempt["id"])
+        continuation = self.store.snapshot()["execution"]["continuation"]
+        self.assertEqual(continuation["turn_id"], "01a10503-0e79-7033-90ae-724e5dfb7d44")
+        self.assertIn("touch still pending", continuation["message"])
+
+    def test_acceptance_waiting_is_distinct_from_a_model_failure(self):
+        prepare_plan(self.store)
+        complete_fixture(self.store, "T1")
+        complete_fixture(self.store, "verify", blocker="Còn thiếu bằng chứng nghiệm thu trình duyệt cho phiên bản hiện tại.")
+        execution = self.store.snapshot()["execution"]
+        self.assertTrue(execution["waiting_for_verification"])
+        self.assertFalse(execution["active"])
+        self.assertEqual(self.store.task("verify")["status"], "blocked")
+        self.store.update("verify", reason="Model quá tải; chưa nhận được kết quả.")
+        self.assertFalse(self.store.snapshot()["execution"]["waiting_for_verification"])
+
+    def test_structured_chat_completion_becomes_reviewable_not_accepted(self):
+        factory, _ = self.continuation_fixture(structured=True)
+        self.assertTrue(sync_task(self.store, "T1", factory)["updated"])
+        self.assertEqual(self.store.task("T1")["status"], "reviewing")
+        self.assertIsNone(self.store.task("T1")["review"])
+        self.assertIsNone(self.store.task("T1")["result"]["blocker"])
+
+    def test_capacity_before_turn_start_can_resume_an_empty_existing_thread(self):
+        factory, thread = self.continuation_fixture()
+        self.store.attempt_update("T1:r1:a1:work", turn_id=None, status="failed")
+        thread["turns"] = []
+        task = self.store.task("T1")
+        factory.return_value.__enter__.return_value.run.return_value = {
+            "result": dict(task["result"], blocker=None), "thread_id": "worker-thread", "turn_id": "resumed-turn", "tokens": 20}
+        with patch("product_cycle.runner.finish_work"):
+            continue_task(self.store, "T1", factory)
+        self.assertEqual(factory.return_value.__enter__.return_value.run.call_args.kwargs["thread_id"], "worker-thread")
+        self.assertEqual(self.store.task("T1")["status"], "reviewing")
+
+    def test_paused_cycle_does_not_restart_a_blocked_chat(self):
+        factory, _ = self.continuation_fixture()
+        self.store.pause(True)
+        with self.assertRaises(WorkflowError):
+            continue_task(self.store, "T1", factory)
+        factory.assert_not_called()
+
+    def test_active_or_wrong_project_chat_is_not_imported_or_restarted(self):
+        factory, thread = self.continuation_fixture(active=True)
+        self.assertTrue(continue_task(self.store, "T1", factory)["active"])
+        execution = self.store.snapshot()["execution"]
+        self.assertEqual(execution["status"], "running")
+        self.assertEqual(execution["backend"], "codex-desktop")
+        self.assertEqual(execution["task_id"], "T1")
+        factory.return_value.__enter__.return_value.run.assert_not_called()
+        thread["cwd"] = str(self.base / "other")
+        with self.assertRaises(WorkflowError):
+            sync_task(self.store, "T1", factory)
+
+    def test_continue_repairs_in_existing_worker_chat_with_recorded_feedback(self):
+        prepare_plan(self.store)
+        task = complete_fixture(self.store, "T1", review_decision="blocked")
+        work_id, review_id = "T1:r1:a1:work", "T1:r1:a1:review:1"
+        self.store.attempt_update(work_id, thread_id="worker-thread", turn_id="worker-turn")
+        self.store.attempt_update(review_id, thread_id="review-thread", turn_id="review-turn")
+        from unittest.mock import MagicMock
+        factory = MagicMock()
+        client = factory.return_value.__enter__.return_value
+        client.read_thread.return_value = {"id": "review-thread", "cwd": str(self.store.project),
+                                          "turns": [{"id": "review-turn", "status": "completed", "items": []}]}
+        client.run.return_value = {"result": task["result"], "thread_id": "worker-thread", "turn_id": "repair-turn", "tokens": 40}
+        with patch("product_cycle.runner.finish_work") as finish:
+            continue_task(self.store, "T1", factory)
+        self.assertEqual(client.run.call_args.kwargs["thread_id"], "worker-thread")
+        self.assertFalse(client.run.call_args.kwargs["readonly"])
+        self.assertIsNone(client.run.call_args.kwargs["title"])
+        self.assertEqual(self.store.task("T1")["attempts"], 1)
+        finish.assert_called_once()
+        context = json.loads((self.store.latest_directory("T1") / "context.json").read_text())
+        self.assertEqual(context["feedback"]["review"]["findings"], task["review"]["findings"])
+
+    def test_capacity_retries_same_model_without_consuming_work_attempts(self):
+        config = self.store.config
+        config["mode"] = "live"
+        write_json(self.store.root / "config.json", config)
+        with patch("product_cycle.runner.CodexClient") as factory, patch("product_cycle.runner.time.sleep") as sleep:
+            client = factory.return_value.__enter__.return_value
+            def unavailable(*args, **kwargs):
+                factory.call_args.kwargs["on_event"]({"method": "client/threadReady", "params": {"thread_id": "capacity-thread"}})
+                raise ModelCapacityError("Busy")
+            client.run.side_effect = unavailable
+            with self.assertRaises(ModelCapacityError):
+                execute(self.store, "analysis", factory)
+            self.assertEqual(client.run.call_count, 3)
+            self.assertEqual([call.args[0] for call in sleep.call_args_list], [15, 30])
+            self.assertEqual({call.args[2] for call in client.run.call_args_list}, {config["models"]["analysis"]["model"]})
+            self.assertEqual(client.run.call_args_list[-1].kwargs["thread_id"], "capacity-thread")
+        self.assertEqual(self.store.task("analysis")["attempts"], 1)
+        self.assertEqual(self.store.task("analysis")["status"], "blocked")
+        retries = [e for e in self.store.snapshot()["events"] if e["type"] == "runtime.retry"]
+        self.assertEqual(len(retries), 2)
+
+    def test_continue_resumes_browser_verification_without_bypassing_acceptance(self):
+        prepare_plan(self.store, self.plan(browser=True))
+        complete_fixture(self.store, "T1")
+        # The worker result exists but no genuine browser observation was recorded.
+        aid, directory = self.store.begin("verify", "work")
+        (directory / "acceptance.md").write_text("Browser evidence pending.")
+        from product_cycle.contracts import work_steps
+        path = str((directory / "acceptance.md").relative_to(self.store.project))
+        criteria = ["C" + str(i + 1) for i in range(len(self.store.task("verify")["criteria"]))]
+        result = {"summary": "Verification pending", "artifacts": [{"path": path, "purpose": "Acceptance report", "criteria": criteria, "requirements": ["R1"]}],
+                  "limitations": ["No browser observations"], "blocker": None,
+                  "steps": [{"id": s["id"], "summary": "Pending observation", "artifacts": [path]} for s in work_steps("verify")]}
+        self.store.work_finished("verify", aid, result)
+        self.store.update("verify", status="blocked")
+        self.store.attempt_update(aid, thread_id="verify-thread", turn_id="verify-turn")
+        from unittest.mock import MagicMock
+        factory = MagicMock()
+        factory.return_value.__enter__.return_value.read_thread.return_value = {
+            "id": "verify-thread", "cwd": str(self.store.project), "turns": [{"id": "verify-turn", "status": "completed", "items": []}]}
+        client = factory.return_value.__enter__.return_value
+        client.run.return_value = {"result": result, "thread_id": "verify-thread", "turn_id": "continued-turn", "tokens": 20}
+        with self.assertRaisesRegex(WorkflowError, "thiếu bằng chứng"):
+            continue_task(self.store, "verify", factory)
+        self.assertEqual(self.store.task("verify")["status"], "blocked")
+        client.run.assert_called_once()
+        self.assertEqual(client.run.call_args.kwargs["thread_id"], "verify-thread")
+        self.assertIn('"browser_evidence_pending": true', client.run.call_args.args[1])
+        self.assertIsNone(self.store.task("verify")["review"])
+        self.assertEqual(self.store.task("handoff")["status"], "pending")
+
     def test_new_local_cycle_reaches_handoff_without_vps_or_remote_release(self):
         store = Store.create(self.base / "local-product", "Local product", "Local cycle")
         try:
-            self.assertEqual(store.config["gates"], ["handoff"])
+            self.assertEqual(store.config["gates"], ["analysis", "design", "handoff"])
             self.assertEqual(store.config["delivery_mode"], "local")
             self.assertTrue(store.config["release_deferred"])
             while store.next_task():

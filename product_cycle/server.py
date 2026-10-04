@@ -5,17 +5,62 @@ import mimetypes
 import secrets
 import subprocess
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
 from .contracts import WorkflowError, require
 from .store import Store, runner_lock
+from . import desktop
+from .codex import CodexClient
 
 
 def serve(project, port=8787):
     token = secrets.token_urlsafe(32)
     project = str(Path(project).resolve())
+    stopped = threading.Event()
+
+    def sync_chats():
+        from .runner import sync_task, continue_task, run_cycle
+        failures = {}
+        while not stopped.wait(15):
+            advance = False
+            store = Store(project)
+            try:
+                if store.config["mode"] != "live" or store.snapshot()["state"] != "active":
+                    continue
+                with runner_lock(store):
+                    if desktop.enabled(store):
+                        desktop.sync_usage(store)
+                    for task in store.tasks():
+                        if task["status"] not in {"blocked", "running", "reviewing"} or not task["attempts"]:
+                            continue
+                        if desktop.enabled(store) and not desktop.latest(store, task["id"])["thread_id"]:
+                            continue
+                        try:
+                            outcome = sync_task(store, task["id"])
+                            if outcome["updated"] and store.task(task["id"])["status"] in {"reviewing", "done"}:
+                                advance = not desktop.enabled(store)
+                                if store.task(task["id"])["status"] == "reviewing":
+                                    if desktop.enabled(store):
+                                        from .runner import finish_work
+                                        attempt = desktop.latest(store, task["id"])
+                                        finish_work(store, task["id"], attempt["id"], Path(attempt["directory"]), CodexClient)
+                                    else:
+                                        continue_task(store, task["id"])
+                            failures.pop(task["id"], None)
+                        except (WorkflowError, OSError) as exc:
+                            if failures.get(task["id"]) != str(exc):
+                                store.event(task["id"], "continuation.waiting", {"reason": str(exc)})
+                                failures[task["id"]] = str(exc)
+                if advance:
+                    run_cycle(store)
+            except (WorkflowError, OSError):
+                # Another controller may own the lock; never race its state or execution.
+                pass
+            finally:
+                store.close()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -72,6 +117,7 @@ def serve(project, port=8787):
             route = urlparse(self.path).path
             store = Store(project)
             try:
+                require(not store.config.get("dashboard_read_only", False), "Thực hiện trao đổi và quyết định trong Codex. Dashboard chỉ hiển thị kết quả.")
                 length = int(self.headers.get("Content-Length", "0"))
                 require(0 < length <= 16384, "Thông tin gửi lên chưa hợp lệ.")
                 data = json.loads(self.rfile.read(length))
@@ -84,28 +130,39 @@ def serve(project, port=8787):
                 elif route == "/api/reopen":
                     with runner_lock(store):
                         store.reopen(data["task"], data["note"])
-                elif route == "/api/run":
+                elif route in {"/api/run", "/api/continue", "/api/sync"}:
                     with runner_lock(store):
                         require(store.config["mode"] == "live", "Dữ liệu minh họa chỉ dùng để xem quy trình.")
+                        if route != "/api/sync":
+                            require(store.snapshot()["state"] == "active", "Bỏ tạm dừng trước khi tiếp tục quy trình.")
+                        if route != "/api/run":
+                            store.task(data["task"])
+                    command = [sys.executable, "-m", "product_cycle"]
+                    command += ["run", "--project", project, "--continue-blocked"] if route == "/api/run" else [
+                        "continue" if route == "/api/continue" else "sync", "--project", project, "--task", data["task"]]
                     logfile = (store.root / "controller.log").open("ab")
                     try:
-                        subprocess.Popen([sys.executable, "-m", "product_cycle", "run", "--project", project],
+                        subprocess.Popen(command,
                                          cwd=Path(__file__).parent.parent, stdout=logfile, stderr=subprocess.STDOUT, start_new_session=True)
                     finally:
                         logfile.close()
                 else:
                     return self.reply(404, {"error": "Không tìm thấy thao tác."})
                 self.reply(200, {"ok": True})
-            except (WorkflowError, ValueError, KeyError, TypeError):
+            except WorkflowError as exc:
+                self.reply(400, {"error": str(exc)})
+            except (ValueError, KeyError, TypeError):
                 self.reply(400, {"error": "Chưa thực hiện được thao tác. Kiểm tra trạng thái và thông tin quyết định."})
             finally:
                 store.close()
 
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    threading.Thread(target=sync_chats, daemon=True, name="product-cycle-chat-sync").start()
     print("Product Cycle: http://127.0.0.1:" + str(server.server_port) + "/", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        stopped.set()
         server.server_close()

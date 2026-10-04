@@ -20,3 +20,8 @@ Submit work for independent review. Completion requires the stage contract, reco
 The controller owns state, immutable evidence, dependency changes, and delivery packaging. Do not edit its database or evidence objects. Scope changes go through reopen, preserving history and invalidating dependents. Retry budgets do not imply completion. Retro proposals are evaluated before adoption.
 
 Read project AGENTS.md, PRODUCT_CYCLE_RULES.md and CODING_RULES.md when present. New cycles prepare Git, common rules and skills during init, then require the preparatory project_setup task inside Development after architecture and plan.
+
+
+New cycles execute in Codex Desktop by default. The dashboard reads status and evidence; it does not drive execution or record owner decisions. In a native session, use the operating guide's native handoff loop. Never launch a separate writer for a Desktop-owned chat. App Server remains an explicitly selectable executor for unattended sessions.
+
+Collaborate with the owner during product analysis and UX/UI design. Interview them about consequential unknowns, propose directions with tradeoffs, and iterate concrete references. Do not silently reduce an idea to the easiest implementation or claim assumptions are approved. Owner gates cover product direction, design, the first usable core experience, and final delivery; ordinary technical choices stay autonomous. Record only feedback and approvals the human actually supplied.

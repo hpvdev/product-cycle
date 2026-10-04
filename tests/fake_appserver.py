@@ -1,6 +1,7 @@
 """A protocol peer, not a model-quality evaluator."""
 
 import json
+import os
 import sys
 
 mode = sys.argv[1] if len(sys.argv) > 1 else "success"
@@ -17,12 +18,18 @@ for line in sys.stdin:
     mid = message.get("id")
     if method == "initialize":
         emit({"id": mid, "result": {"userAgent": "fixture"}})
+    elif method == "thread/read":
+        emit({"id": mid, "result": {"thread": {"id": params["threadId"], "cwd": os.getcwd(),
+              "turns": [{"id": "fixture-turn", "status": "completed", "items": []}]}}})
     elif method in {"thread/start", "thread/resume"}:
         emit({"id": mid, "result": {"thread": {"id": "fixture-thread"}, "model": params["model"], "reasoningEffort": params["config"]["model_reasoning_effort"]}})
     elif method == "thread/name/set":
         emit({"id": mid, "result": {}})
         emit({"method": "thread/name/updated", "params": {"threadId": params["threadId"], "threadName": params["name"]}})
     elif method == "turn/start":
+        if mode == "capacity-request":
+            emit({"id": mid, "error": {"code": -32000, "message": "Selected model is at capacity. Please try a different model."}})
+            continue
         if mode == "request":
             emit({"id": 99, "method": "item/tool/requestUserInput", "params": {"threadId": "fixture-thread", "questions": []}})
             continue
@@ -30,6 +37,9 @@ for line in sys.stdin:
         if mode == "timeout":
             continue
         emit({"method": "thread/tokenUsage/updated", "params": {"threadId": "fixture-thread", "turnId": "fixture-turn", "tokenUsage": {"total": {"totalTokens": 30}}}})
-        if mode != "failed":
+        if mode not in {"failed", "capacity"}:
             emit({"method": "item/completed", "params": {"threadId": "fixture-thread", "turnId": "fixture-turn", "item": {"type": "agentMessage", "id": "answer", "phase": "final_answer", "text": json.dumps({"ok": True, "effort": params["effort"]})}}})
-        emit({"method": "turn/completed", "params": {"threadId": "fixture-thread", "turn": {"id": "fixture-turn", "status": "failed" if mode == "failed" else "completed"}}})
+        turn = {"id": "fixture-turn", "status": "failed" if mode in {"failed", "capacity"} else "completed"}
+        if mode == "capacity":
+            turn["error"] = {"message": "Selected model is at capacity", "codexErrorInfo": "serverOverloaded"}
+        emit({"method": "turn/completed", "params": {"threadId": "fixture-thread", "turn": turn}})

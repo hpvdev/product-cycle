@@ -11,7 +11,9 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
     task = store.task(tid)
     aid, directory = store.begin(tid, "work")
     artifacts = []
-    filenames = FILES.get(task["role"], ["increment.md"])
+    filenames = list(FILES.get(task["role"], ["increment.md"]))
+    if task["stage"] == "analysis" and store.config.get("collaborative_product"):
+        filenames += ["product-direction.json"]
     if task["stage"] == "architecture" and store.config.get("service_setup_required"):
         filenames = filenames + ["services.json"]
     if task["stage"] == "architecture" and store.config.get("project_setup_required"):
@@ -20,12 +22,20 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
         path = directory / filename
         if filename == "requirements.json":
             write_json(path, {"requirements": [{"id": "R1", "description": "Ghi và đọc lại một thông tin", "acceptance": ["Thông tin đã lưu có thể đọc lại"]}]})
+        elif filename == "product-direction.json":
+            write_json(path, {"users": "Người dùng tổng hợp", "problem": "Tình huống kiểm tra controller",
+                "desired_experience": "Ghi và đọc thông tin", "differentiation": "Chỉ minh họa, chưa đánh giá thị trường",
+                "options": [{"name": "Phương án minh họa", "description": "Không phải hướng sản phẩm thật", "tradeoffs": "Chưa kiểm chứng trải nghiệm"}],
+                "recommendation": "Phương án minh họa", "quality_targets": [{"description": "Đọc lại thông tin",
+                    "verification": "Quan sát tổng hợp", "requirement": "R1"}], "open_questions": []})
         elif filename == "plan.json":
             value = plan or {"tasks": [{"id": "T1", "title": "Lưu thông tin", "instructions": "Tạo khả năng lưu và đọc", "depends_on": [], "requirements": ["R1"], "criteria": ["Đọc lại dữ liệu đã lưu"], "checks": []}], "verification_commands": [], "browser_required": False}
             if store.config.get("service_setup_required") and plan is None:
                 value.update(service_ids=[service["id"] for service in store.services()],
                              delivery={"mode": "local", "access": "Bản local minh họa", "instructions": "Hợp đồng minh họa, chưa có sản phẩm thật.", "run_commands": [], "deferred": ["VPS và phát hành ra ngoài"]})
                 value["tasks"][0]["services"] = value["service_ids"]
+            if store.config.get("experience_checkpoint_required") and plan is None:
+                value["experience_checkpoint"] = {"task_id": "T1", "goal": "Trải nghiệm minh họa", "evaluation": ["Chỉ kiểm tra controller, chưa có sản phẩm thật"]}
             write_json(path, value)
         elif filename == "services.json":
             write_json(path, {"services": services or []})

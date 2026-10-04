@@ -20,3 +20,5 @@ When invoked on its own, perform only the requested stage in the selected projec
 5. Chốt quy tắc và cách nghiệm thu: Ghi màu, font, khoảng cách, bố cục thích ứng và tiêu chí so sánh.
 
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
+
+Collaborate with the owner in Codex on journeys and concrete visual/prototype alternatives. Iterate on their feedback and await actual approval of the baseline before dependent implementation.

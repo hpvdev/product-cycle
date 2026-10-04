@@ -88,7 +88,7 @@ def task_progress(task, tasks, config, events, decisions, root):
     status = {"approve": "done", "rework": "rework", "blocked": "blocked"}.get(review.get("decision"),
         "running" if latest_review and latest_review["status"] == "running" else "blocked" if latest_review else base)
     add("review", "Review độc lập", "Đánh giá từng bước và tiêu chí trên đầu ra thực tế.", status, review.get("summary", ""), source="reviewer")
-    if task["stage"] in config["gates"]:
+    if task["stage"] in config["gates"] or task["id"] in config.get("task_gates", []):
         decision = next((item for item in reversed(decisions) if item["task_id"] == task["id"] and item["revision"] == task["revision"]), None)
         status = "done" if decision and decision["action"] == "approve" and task["status"] == "done" else "rework" if decision and decision["action"] == "reject" else "awaiting_approval" if task["status"] == "awaiting_approval" else "untracked" if task["status"] == "done" else base
         add("approval", "Chủ sản phẩm duyệt kết quả", "Xem đầu ra, bằng chứng và hạn chế trước khi chấp nhận.", status,
