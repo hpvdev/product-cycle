@@ -22,6 +22,21 @@ Nguồn là nền tảng thiết kế, không chứng minh gói đạt chất l�
 
 Không đóng gói `frontend-skill` đã bị gỡ khỏi danh sách curated của `openai/skills`. [Hướng dẫn model hiện hành](https://developers.openai.com/api/docs/guides/latest-model) và [Rethinking skills and prompts](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra) là nguồn để cập nhật prompting và giữ hướng dẫn đúng phạm vi. Product Cycle chỉ nạp hướng dẫn frontend cho công việc có UI; quyết định chủ sản phẩm, mẫu đã duyệt, stack và bằng chứng của workflow vẫn là chuẩn. Gen thêm concept khi chi tiết mới chưa rõ, tái sử dụng hệ thiết kế khi đã rõ; so sánh ảnh render thật trong phạm vi kiểm chứng được phép. Đây là cách tích hợp của Product Cycle, chưa chứng minh sản phẩm đầu ra đẹp hoặc đạt nghiệm thu.
 
+## Phân tích sản phẩm: phương pháp và kinh nghiệm cộng đồng
+
+Đối chiếu ngày 04/10/2026. Bước 01 dùng các phương pháp sau để cải thiện phỏng vấn và review nội dung, giữ nguyên năm bước nhỏ và schema hiện tại:
+
+| Nguồn | Điều áp dụng |
+|---|---|
+| [Jobs to Be Done — Christensen Institute](https://www.christenseninstitute.org/theory/jobs-to-be-done/) | Làm rõ hoàn cảnh và tiến bộ người dùng mong muốn, gồm cả nhu cầu cảm xúc; tránh suy nhu cầu từ tên loại ứng dụng. |
+| [Story-based interviews — Product Talk](https://www.producttalk.org/story-based-customer-interviews/) | Khai thác một tình huống đã xảy ra và hỏi tiếp theo câu trả lời. Phân biệt trải nghiệm trực tiếp với hình dung của chủ sản phẩm. |
+| [Opportunity Solution Trees — Product Talk](https://www.producttalk.org/opportunity-solution-trees/) | Nối kết quả mong muốn, nhu cầu, giải pháp và giả định cần thử. Với dữ liệu còn thiếu, dùng bản đồ giả thuyết ngắn; không gọi là cơ hội đã được xác thực. |
+| [Brainstorming — obra/superpowers](https://github.com/obra/superpowers/blob/main/skills/brainstorming/SKILL.md) | Tham khảo đối thoại thích ứng, phản ánh lại ý định, so sánh phương án và giữ quyết định của con người. Không cài gói hoặc sao chép quy tắc tự commit, phân loại, gate hay phương thức thực thi của họ. |
+| [Product discovery flow — r/ProductManagement](https://www.reddit.com/r/ProductManagement/comments/1oevcrc/whats_your_product_discovery_flow/) | Kinh nghiệm cộng đồng về bắt đầu từ vấn đề/kết quả và dùng AI tổng hợp dữ kiện. Đây là chia sẻ cá nhân, không phải đồng thuận, nghiên cứu người dùng của dự án hay chuẩn OpenAI. |
+| [Let Claude interview you — Anthropic](https://code.claude.com/docs/en/best-practices#let-claude-interview-you) | Phỏng vấn trước khi viết đặc tả, khai thác đánh đổi và điểm chưa rõ. Công cụ hỏi đáp cụ thể phụ thuộc runtime; Product Cycle tiếp tục dùng chat Codex. |
+
+Rubric review S1–S5/C1–C2 và cách tách quyết định đã chốt, đề xuất, câu hỏi mở, giả định để kiểm chứng là thiết kế tích hợp của Product Cycle. Đây là cải tiến hướng dẫn, chưa chứng minh AI sẽ phân tích sâu hoặc sản phẩm đạt chất lượng trên dự án thật. Không áp đặt số cuộc phỏng vấn, số câu hỏi, số phương án hay khảo sát thị trường cho mọi sản phẩm.
+
 ## Phân biệt nguồn và quyết định của gói
 
 **Có nguồn OpenAI:** mục tiêu và tiêu chí đo được; công việc có phạm vi và phụ thuộc; kế hoạch khác với bằng chứng đã quan sát; giữ quyết định/ngữ cảnh để tiếp tục; đánh giá skill bằng kết quả, quá trình, phong cách và hiệu suất. Cookbook là ví dụ có thể điều chỉnh, không phải một quy trình SDLC duy nhất được OpenAI chứng nhận.

@@ -14,3 +14,7 @@ When a Product Cycle context packet is supplied, its assigned task, accepted_inp
 When invoked on its own, perform only the requested stage in the selected project. Establish the relevant inputs and authorized scope; do not restart the entire cycle or implicitly begin the next stage. Keep repository and user instructions in effect.
 
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
+
+## Reviewing product analysis
+
+For an analysis assignment, read the substance rubric in [discovery guidance](../product-cycle-analysis/references/discovery.md). Assess whether the user/context/outcome, concrete journey, recommendation and scope are useful for an informed product decision, not just whether files exist. Check unsupported assumptions and consistency between owner feedback, narrative and open_questions. Map findings to the assigned C/S criteria; do not add gates or demand a finished product. A sound proposal can pass review before owner approval when its remaining choices are explicit and the owner gate is preserved.

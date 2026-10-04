@@ -13,6 +13,8 @@ Run commands from the Product-Cycle repository, or use `product-cycle` after loc
 
 `pause` takes effect at task boundaries. `resume` lifts that pause; use `run` to continue. After a controller crash, `recover` marks unfinished work blocked. Inspect actual changes, then use `reopen` before repeating work. Third-party setup starts after design and plan review, scoped to the selected accounts/project. Missing inputs block dependent increments; independent work can continue. VPS provisioning and external deployment/publication are deferred.
 
+For a human-requested restart from the beginning or a major stage, use [product-cycle-reset](../../product-cycle-reset/SKILL.md). Reopening invalidates results but cannot clear chat messages. Execute restarted work in a new empty chat/session using the minimal restart handoff and current request, rather than continuing or forking the old conversation. Preserve historical artifacts for audit; do not load them as current product inputs. A partial restart retains accepted upstream inputs.
+
 Codex must be installed and authenticated. `doctor` reports availability without secrets. Browser/MCP capabilities from desktop are not assumed to exist in app-server. If browser acceptance is needed and unavailable, the operator records real observations with `browser-evidence`, then invokes `review`. `judge` sends explicitly supplied non-sensitive text to Jev for a semantic opinion.
 
 `package --output /outside/project/delivery` exports source, evidence, decisions, and full history after all stages are accepted. It skips .env files and symlinks, listing omissions in the manifest. It does not deploy; handoff.md explains setup and product version.

@@ -11,7 +11,7 @@ from .runner import execute, review_task, run_cycle, sync_task, continue_task
 from .server import serve
 from .store import Store, fingerprint, now, write_json, runner_lock, state_root
 from .bootstrap import prepare_project, repository_state
-from .installer import install_skills
+from .installer import install_skills, update_skills, uninstall_skills
 from . import desktop
 
 
@@ -28,9 +28,16 @@ def parser():
     init.add_argument("--max-cycle-tokens", type=int, help="Ngân sách token toàn quy trình; mặc định chỉ theo dõi")
     init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"],
                       help="Dùng effort này cho mọi bước thay cho cấu hình theo vai trò")
-    for name in ["bootstrap", "install-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress"]:
+    for name in ["bootstrap", "install-skills", "update-skills", "uninstall-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress"]:
         cmd = sub.add_parser(name)
         cmd.add_argument("--project", required=True)
+        if name == "update-skills":
+            cmd.add_argument("--apply", action="store_true", help="Áp dụng cập nhật; mặc định chỉ xem thay đổi")
+            cmd.add_argument("--skill", action="append", help="Chỉ cập nhật skill này; có thể chọn nhiều lần")
+            cmd.add_argument("--replace-customized", action="store_true", help="Thay skill đã chỉnh sửa riêng sau khi xem thay đổi; giữ bản sao lưu")
+        if name == "uninstall-skills":
+            cmd.add_argument("--apply", action="store_true", help="Gỡ và sao lưu skill workflow; mặc định chỉ xem danh sách")
+            cmd.add_argument("--force", action="store_true", help="Gỡ và sao lưu cả skill workflow đã tùy chỉnh")
         if name in {"work", "review", "decide", "reopen", "browser-evidence", "judge", "sync", "continue", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress"}:
             cmd.add_argument("--task", required=True)
         if name == "configure":
@@ -112,8 +119,35 @@ def main(argv=None):
             result = doctor(args.project)
             require(result["ready"], "Môi trường chưa sẵn sàng; xử lý các mục chưa đạt trong kết quả kiểm tra.")
             return
-        if args.command == "install-skills":
-            print(json.dumps(install_skills(args.project), ensure_ascii=False, indent=2))
+        if args.command in {"install-skills", "update-skills", "uninstall-skills"}:
+            if args.command == "install-skills":
+                apply = True
+                operation = lambda: install_skills(args.project)
+            elif args.command == "uninstall-skills":
+                apply = args.apply
+                operation = lambda: uninstall_skills(args.project, args.apply, args.force)
+            else:
+                apply = args.apply
+                operation = lambda: update_skills(args.project, args.apply, args.skill, args.replace_customized)
+            if apply and (state_root(args.project) / "state.sqlite3").is_file():
+                store = Store(args.project)
+                with runner_lock(store):
+                    require(not store.db.execute("SELECT id FROM attempts WHERE status IN ('running','queued')").fetchone()
+                            and not any(task["status"] in {"running", "reviewing"} for task in store.tasks()),
+                            "Kết thúc phiên đang chạy trước khi thay đổi bộ skill. Nếu phiên bị gián đoạn, kiểm tra rồi recover trước.")
+                    if args.command != "uninstall-skills":
+                        foundation = store.foundation()
+                        require(all(check["status"] == "done" for check in foundation.get("checks", []) if check["id"] != "skills")
+                                and foundation.get("checks"),
+                                "Kiểm tra và ghi nhận nền tảng dự án bằng bootstrap trước khi cập nhật; không tự chấp nhận thay đổi quy tắc riêng.")
+                    report = operation()
+                    if args.command != "uninstall-skills":
+                        store.bootstrap()
+                    event = {"install-skills": "skills.installed", "update-skills": "skills.updated", "uninstall-skills": "skills.uninstalled"}
+                    store.event(None, event[args.command], report)
+            else:
+                report = operation()
+            print(json.dumps(report, ensure_ascii=False, indent=2))
             return
         if args.command == "bootstrap":
             if (state_root(args.project) / "state.sqlite3").is_file():

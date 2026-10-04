@@ -6,11 +6,48 @@
 
 Brief cần: người dùng, vấn đề, kết quả, phạm vi, ràng buộc, những gì chưa biết. Dùng `init` cho project được chọn; `serve` mở dashboard; `run` bắt đầu công việc sẵn sàng. Kiểm tra trước rằng project và PRODUCT_CYCLE_HOME là vị trí mong muốn.
 
-Skill cài theo project: `python3 scripts/install_skill.py --project /absolute/product`. Script cài 1 skill điều phối, 11 skill chuyên môn (9 bước lớn, một skill chuẩn bị code và review độc lập) và Frontend App Builder vào `.agents/skills/`. Nó kiểm tra xung đột trước khi sao chép, không ghi đè skill có sẵn và không sửa thiết lập Codex toàn cục. Bộ controller vẫn chạy từ repository hoặc executable đã cài.
+Skill cài theo project: `python3 scripts/install_skill.py --project /absolute/product`. Script cài 1 skill điều phối, 11 skill chuyên môn (9 bước lớn, một skill chuẩn bị code và review độc lập), Frontend App Builder và `product-cycle-reset` vào `.agents/skills/`. Nó kiểm tra xung đột trước khi sao chép, không ghi đè skill có sẵn và không sửa thiết lập Codex toàn cục. Bộ controller vẫn chạy từ repository hoặc executable đã cài.
+
+Để thử lại workflow, dùng [skill làm lại quy trình](../skills/product-cycle-reset/SKILL.md) trong chat Codex: “Dùng $product-cycle-reset làm lại từ bước 01” hoặc “Làm lại từ bước 02 UI/UX và tiếp tục bước này”. Skill dùng `reopen` để tạo phiên bản mới và vô hiệu hóa kết quả phụ thuộc, giữ mã nguồn, Git và lịch sử. Reset riêng mặc định để cycle tạm dừng; yêu cầu tiếp tục mới thực thi. Việc reset không tự cập nhật skill đã cài hoặc xóa cấu hình dịch vụ thật.
+
+Làm lại dùng chat mới, không tiếp tục hoặc fork chat cũ. Skill chuẩn bị bản giao việc ngắn trong `.product-cycle/restarts/`, chỉ gồm yêu cầu hiện tại, ranh giới làm lại, đầu vào phía trước còn hiệu lực và lựa chọn chủ sản phẩm yêu cầu giữ. Phản hồi revision cũ không được đưa vào packet mới; lịch sử vẫn lưu để audit. Bạn mở chat mới với bản giao việc đó, hoặc yêu cầu rõ việc tạo chat mới. Mã nguồn và hướng dẫn dự án vẫn còn; reset workflow không đồng nghĩa xóa sạch project hay buộc chat cũ quên nội dung.
 
 Frontend App Builder hỗ trợ concept trong Thiết kế, dùng mẫu đã duyệt trong Phát triển và so sánh concept với ảnh render trong Nghiệm thu. Prompt cung cấp đường dẫn skill cho Thiết kế và cho công việc Phát triển/Nghiệm thu khi baseline đã chốt có UI; backend và reviewer không tự nhận toàn bộ hướng dẫn frontend. Ưu tiên skill theo project, sau đó skill cá nhân nếu có; thiếu skill hoặc công cụ thì ghi nhận hạn chế. Giữ scope, stack, schema, bằng chứng và quyết định chủ sản phẩm của workflow; không tự coi điểm tự chấm là nghiệm thu. Cycle cũ không tự được ghi đè skill đã cài.
 
+### Cập nhật skill ở project đã cài
+
+Chạy từ checkout Product-Cycle có bản hướng dẫn muốn áp dụng, hoặc executable của gói đã cập nhật. `update-skills --project /absolute/product` chỉ đọc, liệt kê skill và file khác biệt. `--skill <tên>` giới hạn phạm vi; `--apply` mới thay file. Với cycle đã khởi tạo, lệnh apply giữ runner lock, từ chối phiên chưa kết thúc và kiểm tra nền tảng ngoài skill trước khi thay; sau đó ghi nhận nền tảng và sự kiện cập nhật. Skill bổ sung cũng được cài. Các skill khác của project không thuộc bundle được giữ nguyên.
+
+Lần cài mới lưu `.agents/.product-cycle-skills.json` để nhận biết bản gốc. Nếu thư mục skill đã thay đổi hoặc không có bản gốc đáng tin cậy, apply dừng trước khi thay bất kỳ skill nào. Xem các file khác biệt và nội dung thực tế; có thể hợp nhất chỉnh sửa thủ công, hoặc chọn rõ `--skill <tên> --replace-customized --apply` để thay toàn bộ skill đó. Bản cũ, gồm file tùy chỉnh, được giữ trong đường dẫn backup mà lệnh trả về. Project cũ có cùng nội dung bundle hiện tại có thể được ghi nhận làm bản gốc; không tự suy bản khác là không có tùy chỉnh. Không dùng hash nền tảng đã ghi nhận làm chứng minh rằng skill đó là bản upstream.
+
+Ví dụ cập nhật phần phân tích và review sau khi đã xem bản khác biệt:
+
+```sh
+python3 -m product_cycle update-skills --project /absolute/product --skill product-cycle-analysis --skill product-cycle-review
+python3 -m product_cycle update-skills --project /absolute/product --skill product-cycle-analysis --skill product-cycle-review --apply
+```
+
+Nếu có xung đột và chủ dự án đã chọn thay các skill trên, thêm `--replace-customized`. Khi phiên bị ngắt, xác nhận không còn writer rồi mới `recover`; không tự dùng recover để bỏ qua phiên đang chạy. Trong chat Codex, yêu cầu đọc lại các skill vừa cập nhật. Lệnh không cập nhật controller executable/server đang chạy, không di chuyển schema/policy/model, không xóa source/lịch sử hay đánh dấu kết quả cũ là đã chạy bằng skill mới. Muốn thử lại một bước dùng skill reset theo phạm vi được chọn. Không tự áp dụng cho mọi project chỉ vì một project đã đồng ý cập nhật.
+
 Một project mới dùng `init --project /absolute/product --brief /absolute/brief.md --name "Tên sản phẩm"`, sau đó `serve --project /absolute/product` để xem dashboard và `run --project /absolute/product` từ terminal khác để thực thi. `init` tự chuẩn bị Git, file loại trừ, hướng dẫn chung và bộ skill trước khi bắt đầu phân tích. Không tự commit/push hoặc đổi Git có sẵn. Mỗi project có kho trạng thái riêng ngoài thư mục worker được ghi.
+
+### Gỡ để cài lại
+
+Trong checkout Product-Cycle, chạy với đường dẫn project sử dụng:
+
+```sh
+python3 -m product_cycle uninstall-skills --project /absolute/product
+python3 -m product_cycle uninstall-skills --project /absolute/product --apply
+python3 -m product_cycle install-skills --project /absolute/product
+```
+
+Uninstall chỉ gỡ các skill nằm trong bundle hiện tại khỏi `.agents/skills/` và cập nhật bản ghi phiên bản. Mặc định xem trước; `--apply` chuyển chúng vào `.product-cycle/skill-backups/` cùng bản manifest cũ. Nếu có tùy chỉnh hoặc chưa xác định được bản gốc, cần `--force --apply` để gỡ cả phần đó sau khi xem danh sách. Skill ngoài bundle, Git, mã nguồn, AGENTS.md, coding/common rules, kho trạng thái, token, quyết định và bằng chứng vẫn được giữ. Không gỡ bản CLI đã cài trong môi trường Python. Không dùng uninstall để reset tiến trình; skill reset vẫn nằm trong bundle và được cài lại.
+
+Kết thúc các worker/chat đang thực thi trước khi gỡ hoặc cài. Với cycle đã khởi tạo, CLI giữ runner lock và từ chối queued/running attempt. Sau khi gỡ, nền tảng báo thiếu skill; cài lại ghi nhận bộ skill mới và nền tảng mà không chạy model. Mở chat mới để tránh dùng hướng dẫn còn trong context cũ. Không gọi bootstrap giữa uninstall và reinstall vì bootstrap tự bổ sung skill thiếu.
+
+### Lấy phiên bản workflow mới
+
+Dừng worker và server của project, rồi cập nhật bản clone dùng để cài bằng `git pull --ff-only`. Nếu chạy executable trong môi trường Python, chạy `.venv/bin/python -m pip install --upgrade .` từ clone đó; nếu chạy trực tiếp bằng `python3 -m product_cycle` trong checkout thì bỏ qua bước pip. Tiếp theo preview/apply `update-skills` cho từng project được chọn, xử lý tùy chỉnh bằng các tùy chọn đã mô tả, rồi khởi động dashboard bằng bộ chạy mới và mở chat mới. Không tự pull/reset repo phát triển khi còn thay đổi local. CLI không tự tải bản mới từ mạng hay nâng cấp process đang chạy; các lệnh này tách rõ bộ chạy với skill theo project và không tự thay schema/policy của cycle cũ.
 
 ## Các bước nhỏ và mốc thiết kế
 

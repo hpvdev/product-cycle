@@ -42,7 +42,7 @@ python3 -m product_cycle run --project /absolute/product
 
 `run` ở chế độ Codex App chuẩn bị công việc, không tự gọi model. Chat Codex đang hoạt động dùng skill product-cycle để nhận công việc, trao đổi với bạn và gửi kết quả về controller. Xem [vòng thực thi native](skills/product-cycle/references/operating-guide.md#native-codex-loop). Chọn `init --executor codex-app-server` nếu muốn chạy bằng App Server riêng.
 
-`init` tự chuẩn bị Git nếu chưa có, bổ sung `.gitignore`, tạo `AGENTS.md`/`PRODUCT_CYCLE_RULES.md` và cài 13 skill theo project, gồm Frontend App Builder từ repo OpenAI hiện hành. Giữ nguyên Git, hướng dẫn và skill đã có; không tự commit/push. Thiết kế kỹ thuật tạo `project-setup.json`; công việc chuẩn bị bên trong Phát triển tạo coding rules theo stack, cấu trúc code, môi trường, công cụ kiểm tra và phần dùng chung trước mọi task chức năng. State và bằng chứng đã chốt nằm ở `~/.local/share/product-cycle`, ngoài vùng AI được ghi. `PRODUCT_CYCLE_HOME` đổi nơi lưu; giữ nguyên trong một cycle. `PRODUCT_CYCLE_CODEX` chọn binary nếu Codex không nằm trong PATH.
+`init` tự chuẩn bị Git nếu chưa có, bổ sung `.gitignore`, tạo `AGENTS.md`/`PRODUCT_CYCLE_RULES.md` và cài 14 skill theo project, gồm Frontend App Builder từ repo OpenAI hiện hành và skill làm lại quy trình `product-cycle-reset`. Giữ nguyên Git, hướng dẫn và skill đã có; không tự commit/push. Thiết kế kỹ thuật tạo `project-setup.json`; công việc chuẩn bị bên trong Phát triển tạo coding rules theo stack, cấu trúc code, môi trường, công cụ kiểm tra và phần dùng chung trước mọi task chức năng. State và bằng chứng đã chốt nằm ở `~/.local/share/product-cycle`, ngoài vùng AI được ghi. `PRODUCT_CYCLE_HOME` đổi nơi lưu; giữ nguyên trong một cycle. `PRODUCT_CYCLE_CODEX` chọn binary nếu Codex không nằm trong PATH.
 
 Dự án mới xác định màn hình, trạng thái và đường chuyển trước khi coding. Mỗi trạng thái trong phạm vi phải có ảnh thiết kế để bạn xem và duyệt; có thể dùng ảnh Image Gen hoặc ảnh chụp prototype, tái sử dụng cùng bộ quy tắc thiết kế. Mỗi task UI gắn với đúng màn hình, trạng thái, kích thước và phiên bản mẫu; khi code phải có ảnh giao diện thật và báo cáo đối chiếu, đồng thời kiểm tra logic theo đặc tả. Frontend App Builder hỗ trợ concept, thi công và đối chiếu ảnh UI thật. Bộ cài giữ phiên bản nguồn được ghi trong [SOURCES](docs/SOURCES.md), không tự tải bản mới mỗi lần chạy. Việc cài skill và qua test controller chưa chứng minh chất lượng thị giác của sản phẩm.
 
@@ -55,6 +55,42 @@ python3 -m product_cycle install-skills --project /absolute/product
 ```
 
 `bootstrap` bổ sung nền tảng cho cycle cũ khi không có phiên chạy; nếu source đã nghiệm thu thay đổi, bước verify và phần phụ thuộc cần thực hiện lại. Nó không tự thêm công việc chuẩn bị theo stack vào cycle cũ. Dùng cycle mới để áp dụng trọn hợp đồng hiện tại. `configure --project ... --executor codex-desktop` chuyển nơi thực thi của cycle cũ, giữ lịch sử và gate cũ; hợp đồng cộng tác cần được áp dụng ở revision được chủ sản phẩm đồng ý mở lại. `install-skills` cài riêng và từ chối ghi đè. Các lệnh có trong wheel, dùng được ngoài checkout sau khi cài bằng pip. Graphify là tùy chọn khi repo đã có quan hệ code phức tạp; không cài mặc định cho project mới nhỏ.
+
+Đồng bộ skill cho project đã sử dụng workflow:
+
+```sh
+python3 -m product_cycle update-skills --project /absolute/product
+python3 -m product_cycle update-skills --project /absolute/product --apply
+```
+
+Lệnh đầu chỉ xem thay đổi; lệnh sau áp dụng khi không có phiên đang chạy. Có thể chọn riêng bằng `--skill product-cycle-analysis` (lặp lại để chọn nhiều skill). Bản gốc đã cài được ghi nhận bằng hash; skill tùy chỉnh hoặc project cũ chưa có bản gốc được báo xung đột. Sau khi xem thay đổi, dùng `--skill <tên> --replace-customized --apply` để thay đúng phần đã chọn và sao lưu bản cũ vào `.product-cycle/skill-backups/`. Lệnh không đổi policy/model, không reset chu kỳ hay tự chạy lại các bước. Chat hiện tại cần đọc lại hướng dẫn mới; muốn thử lại kết quả đã làm thì dùng `product-cycle-reset` riêng.
+
+## Gỡ và cài lại skill
+
+Gỡ bộ skill workflow ở project sử dụng để cài lại:
+
+```sh
+python3 -m product_cycle uninstall-skills --project /absolute/product
+python3 -m product_cycle uninstall-skills --project /absolute/product --apply
+python3 -m product_cycle install-skills --project /absolute/product
+```
+
+Lệnh đầu chỉ xem danh sách. Khi gỡ, bản cũ được sao lưu vào `.product-cycle/skill-backups/`; thêm `--force` cùng `--apply` nếu muốn gỡ cả phần đã tùy chỉnh. Mã nguồn, Git, cấu hình, tiến trình, bằng chứng, hướng dẫn chung và skill khác được giữ. Cài lại không làm quy trình chạy lại từ đầu; dùng skill reset riêng khi cần. Kết thúc các phiên thực thi trước khi gỡ/cài lại, rồi mở chat mới để dùng bộ hướng dẫn mới. Các lệnh chạy từ bản Product-Cycle đã clone hoặc gói đã cài, với `--project` trỏ đến project sử dụng.
+
+## Cập nhật bộ workflow từ Git
+
+Repo Product-Cycle là nơi phát triển bộ workflow; `--project` luôn trỏ đến project sử dụng. Dừng phiên thực thi và dashboard trước khi thay bộ chạy. Trong bản clone dùng để cài đặt:
+
+```sh
+git pull --ff-only
+# Nếu sử dụng executable đã cài vào .venv:
+.venv/bin/python -m pip install --upgrade .
+# Đồng bộ skill xuống project sử dụng:
+python3 -m product_cycle update-skills --project /absolute/product
+python3 -m product_cycle update-skills --project /absolute/product --apply
+```
+
+Nếu chạy trực tiếp từ checkout, không cần bước pip. Khi có thay đổi local trong bản clone, giữ lại hoặc xử lý chúng trước khi pull; không force reset repository. Khởi động lại dashboard bằng phiên bản mới và mở chat mới sau khi đồng bộ. Cập nhật bộ chạy và cập nhật skill là hai thao tác riêng; `update-skills` không tải code từ Git hoặc cập nhật process đang chạy. Các cấu hình và mốc đã nghiệm thu được giữ; hợp đồng mới cần thay đổi phạm vi phải được áp dụng qua reset có chủ đích, không tự chuyển trạng thái cũ thành đạt.
 
 ## Kiểm chứng
 

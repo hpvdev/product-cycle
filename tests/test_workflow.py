@@ -9,7 +9,7 @@ from unittest.mock import patch
 from product_cycle.contracts import WorkflowError, validate_plan
 from product_cycle.evals import evaluate
 from product_cycle.fixtures import complete_fixture, prepare_plan
-from product_cycle.runner import execute, prompt_for, run_checks, run_cycle, run_phase, thread_title
+from product_cycle.runner import context, execute, prompt_for, run_checks, run_cycle, run_phase, thread_title
 from product_cycle.store import Store, fingerprint, digest, runner_lock, write_json
 from product_cycle.bootstrap import prepare_project, repository_state, git
 from product_cycle.installer import install_skills
@@ -156,6 +156,32 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.store.task("T1")["status"], "superseded")
         self.assertEqual(self.store.task("verify")["deps"], ["T2"])
         self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM attempts WHERE task_id='T1'").fetchone()[0], 2)
+
+    def test_full_restart_context_excludes_old_feedback_and_accepted_outputs(self):
+        self.store.owner_input("analysis", "Owner", "Previous product direction")
+        prepare_plan(self.store)
+        old = self.store.current_evidence("analysis")[0]
+        self.store.reopen("analysis", "Reconsider direction from scratch")
+        self.store.owner_input("analysis", "Owner", "New product direction")
+        _, directory = self.store.begin("analysis", "work")
+        prompt_for(self.store, self.store.task("analysis"), directory)
+        packet = json.loads((directory / "context.json").read_text())
+        self.assertEqual(packet["accepted_inputs"], [])
+        self.assertEqual([item["note"] for item in packet["owner_inputs"]], ["New product direction"])
+        self.assertEqual(packet["feedback"], {"reason": "Reconsider direction from scratch",
+                                              "review": None, "previous_outputs": []})
+        self.assertTrue((self.store.root / old["object_path"]).is_file())
+        events = self.store.db.execute("SELECT data FROM events WHERE type='owner.input'").fetchall()
+        self.assertEqual([json.loads(row[0])["note"] for row in events],
+                         ["Previous product direction", "New product direction"])
+
+    def test_partial_restart_context_retains_only_accepted_upstream_outputs(self):
+        prepare_plan(self.store)
+        self.store.reopen("design", "Reconsider visual direction")
+        packet = context(self.store, self.store.task("design"))
+        self.assertEqual([item["task"] for item in packet["accepted_inputs"]], ["analysis"])
+        self.assertIsNone(packet["task"]["result"])
+        self.assertIsNone(packet["task"]["review"])
 
     def test_retry_budget_stops_rework(self):
         complete_fixture(self.store, "analysis", review_decision="rework")
@@ -750,7 +776,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(foundation["repository"]["branch"], "main")
             self.assertIsNone(foundation["repository"]["head"])
             self.assertEqual(git(store.project, "remote").stdout, "")
-            self.assertEqual(len(list((store.project / ".agents/skills").glob("*/SKILL.md"))), 13)
+            self.assertEqual(len(list((store.project / ".agents/skills").glob("*/SKILL.md"))), 14)
             for path in [".env", ".env.production", ".product-cycle/private.json"]:
                 self.assertEqual(git(store.project, "check-ignore", "--no-index", path).returncode, 0)
             self.assertEqual(git(store.project, "check-ignore", "--no-index", ".env.example").returncode, 1)
