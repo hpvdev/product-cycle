@@ -7,7 +7,7 @@ Run commands from the Product-Cycle repository, or use `product-cycle` after loc
 3. `python3 -m product_cycle serve --project /absolute/project`
 4. `python3 -m product_cycle run --project /absolute/project`
 
-`run` advances ready tasks sequentially, with a separate read-only review session. It stops at a product-owner decision, a blocker, a budget limit, or no ready work. New local cycles have an owner gate at handoff and independent review at each stage; existing cycles keep their configured gates. Respect authorization already supplied when recording decisions; never invent it.
+`run` advances ready tasks sequentially, with a separate read-only review session. It stops at a product-owner decision, a blocker, an explicitly configured budget limit, or no ready work. New local cycles track token usage without a token ceiling; `init --max-turn-tokens N` and `--max-cycle-tokens N` opt into positive limits. In an idle cycle's config.json, `null` disables the corresponding ceiling; existing numeric limits are preserved. Timeouts and retry limits still apply. New local cycles have an owner gate at handoff and independent review at each stage; existing cycles keep their configured gates. Respect authorization already supplied when recording decisions; never invent it.
 
 `decide --project ... --task handoff --action approve --actor "Owner" --note "Accepted verified local product"` records a decision tied to the reviewed revision. `reject` returns it for rework. `reopen --task ... --note ...` starts a revision and invalidates dependents without deleting evidence.
 

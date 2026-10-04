@@ -51,6 +51,15 @@ class DashboardTests(unittest.TestCase):
             urlopen(self.url + "/evidence/not-registered", timeout=5)
         self.assertEqual(caught.exception.code, 400)
 
+    def test_dashboard_assets_have_browser_content_types(self):
+        for route, content_type in [("/dashboard.css", "text/css"), ("/evidence-reader.js", "text/javascript")]:
+            with self.subTest(route=route), urlopen(self.url + route, timeout=5) as response:
+                self.assertEqual(response.headers.get_content_type(), content_type)
+                self.assertGreater(len(response.read()), 0)
+        with self.assertRaises(HTTPError) as caught:
+            urlopen(self.url + "/web/../store.py", timeout=5)
+        self.assertEqual(caught.exception.code, 404)
+
     def test_post_requires_control_token(self):
         request = Request(self.url + "/api/pause", data=b"{}", headers={"Content-Type": "application/json"})
         with self.assertRaises(HTTPError) as caught:

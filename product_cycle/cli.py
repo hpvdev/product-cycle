@@ -22,6 +22,8 @@ def parser():
     init.add_argument("--brief", required=True, help="File mô tả mục tiêu sản phẩm")
     init.add_argument("--name", required=True)
     init.add_argument("--model", help="Dùng model này cho mọi bước thay cho cấu hình theo vai trò")
+    init.add_argument("--max-turn-tokens", type=int, help="Ngân sách token mỗi phiên; mặc định chỉ theo dõi")
+    init.add_argument("--max-cycle-tokens", type=int, help="Ngân sách token toàn quy trình; mặc định chỉ theo dõi")
     init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"],
                       help="Dùng effort này cho mọi bước thay cho cấu hình theo vai trò")
     for name in ["bootstrap", "install-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "serve", "package", "browser-evidence", "judge"]:
@@ -121,7 +123,12 @@ def main(argv=None):
             print("Đã tạo dữ liệu minh họa; chưa chạy AI hay phát triển dự án thật.")
             return
         if args.command == "init":
+            for value in (args.max_turn_tokens, args.max_cycle_tokens):
+                require(value is None or value > 0, "Ngân sách token phải là số nguyên dương.")
             store = Store.create(args.project, Path(args.brief).read_text(), args.name, args.model, args.effort)
+            config = store.config
+            config.update(max_turn_tokens=args.max_turn_tokens, max_cycle_tokens=args.max_cycle_tokens)
+            write_json(store.root / "config.json", config)
             print("Đã khởi tạo: " + str(store.root))
             return
         if args.command == "serve":

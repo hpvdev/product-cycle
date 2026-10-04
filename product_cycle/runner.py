@@ -8,8 +8,23 @@ import time
 from pathlib import Path
 
 from .codex import CodexClient
-from .contracts import FILES, RESOURCES, RESULT_SCHEMA, REVIEW_SCHEMA, WorkflowError, require, work_steps
+from .contracts import FILES, RESOURCES, RESULT_SCHEMA, REVIEW_SCHEMA, STAGE_TITLES, WorkflowError, require, work_steps
 from .store import fingerprint, now, write_json, runner_lock
+
+
+def thread_title(config, task, review=False):
+    # One thread covers a work item, including its small steps; keep that distinction.
+    def short(text, limit):
+        text = " ".join(text.split())
+        if len(text) <= limit:
+            return text
+        return text[:limit - 1].rsplit(" ", 1)[0] + "…" if " " in text[:limit - 1] else text[:limit - 1] + "…"
+
+    project = short(config["name"].split(" · ", 1)[0], 24)
+    stage = STAGE_TITLES[task["stage"]]
+    item = short(task["title"], 36)
+    phase = "Review" if review else "Thực hiện"
+    return f"Dự án: {project} · Bước lớn: {stage} · Công việc: {item} · {phase}"
 
 
 def context(store, task):
@@ -82,6 +97,7 @@ def prompt_for(store, task, directory, review=False):
 def run_checks(store, task, aid, directory):
     commands = store.check_commands(task)
     for index, command in enumerate(commands):
+        store.event(task["id"], "check.started", {"attempt_id": aid, "index": index + 1, "total": len(commands)})
         log = directory / ("check-" + str(index + 1) + ".log")
         started = time.monotonic()
         with log.open("wb") as output:
@@ -106,7 +122,7 @@ def run_checks(store, task, aid, directory):
         store.record_file(task["id"], str(path.relative_to(store.project)), "Kết quả lệnh kiểm tra", criteria, task["requirements"], "check", "controller", aid)
         if log.stat().st_size:
             store.record_file(task["id"], str(log.relative_to(store.project)), "Nhật ký lệnh kiểm tra", kind="artifact", producer="controller", attempt_id=aid)
-        store.event(task["id"], "check.completed", report)
+        store.event(task["id"], "check.completed", {**report, "attempt_id": aid})
         require(code == 0, "Lệnh kiểm tra chưa thành công; xem bằng chứng để xử lý.")
 
 
@@ -114,7 +130,8 @@ def execute(store, tid, client_factory=CodexClient):
     task = store.task(tid)
     require(store.config["mode"] == "live", "Dữ liệu minh họa không chạy Codex; khởi tạo dự án live riêng.")
     tokens_used = store.snapshot()["tokens"] or 0
-    require(tokens_used < store.config["max_cycle_tokens"], "Quy trình đã đạt ngân sách token.")
+    cycle_limit = store.config.get("max_cycle_tokens")
+    require(cycle_limit is None or tokens_used < cycle_limit, "Quy trình đã đạt ngân sách token.")
     aid, directory = store.begin(tid, "work")
     try:
         task = store.task(tid)
@@ -140,10 +157,27 @@ def run_phase(store, task, aid, directory, review, client_factory):
     config = store.config
     role = "review" if review else task["role"]
     selected = config["models"][role]
+    last_activity = 0
+    session = {}
 
     def observe(message):
+        nonlocal last_activity
         method = message.get("method", "")
         params = message.get("params", {})
+        if method == "client/threadReady":
+            session["threadId"] = params.get("thread_id")
+        elif method == "client/turnReady":
+            session["turnId"] = params.get("turn_id")
+        elif any(params.get(key) is not None and session.get(key) is not None and params[key] != session[key]
+                 for key in ("threadId", "turnId")):
+            return
+        if method.startswith(("item/", "turn/", "thread/tokenUsage/")):
+            current = time.monotonic()
+            if current - last_activity >= 5 or method in {"item/started", "item/completed", "turn/completed"}:
+                # Keep liveness without storing raw command output or reasoning text in the dashboard.
+                store.event(task["id"], "runtime.activity", {"attempt_id": aid, "phase": "review" if review else "work",
+                            "method": method, "item_type": params.get("item", {}).get("type")})
+                last_activity = current
         if method == "client/threadReady":
             store.attempt_update(aid, **params)
         elif method == "client/turnReady":
@@ -165,13 +199,16 @@ def run_phase(store, task, aid, directory, review, client_factory):
             store.event(task["id"], method, params)
 
     prompt = prompt_for(store, task, directory, review)
-    remaining = config["max_cycle_tokens"] - (store.snapshot()["tokens"] or 0)
-    require(remaining > 0, "Quy trình đã đạt ngân sách token.")
+    cycle_limit = config.get("max_cycle_tokens")
+    remaining = None if cycle_limit is None else cycle_limit - (store.snapshot()["tokens"] or 0)
+    require(remaining is None or remaining > 0, "Quy trình đã đạt ngân sách token.")
+    limits = [limit for limit in (config.get("max_turn_tokens"), remaining) if limit is not None]
     with client_factory(directory, on_event=observe) as client:
         output = client.run(store.project, prompt, selected["model"], selected["effort"],
                             REVIEW_SCHEMA if review else RESULT_SCHEMA, readonly=review,
                             network=config["network_access"] and not review,
-                            timeout=config["turn_timeout_seconds"], max_tokens=min(config["max_turn_tokens"], remaining))
+                            timeout=config["turn_timeout_seconds"], max_tokens=min(limits) if limits else None,
+                            title=thread_title(config, task, review))
     result = output["result"]
     write_json(directory / "result.json", result)
     store.attempt_update(aid, tokens=output.get("tokens"), thread_id=output.get("thread_id"), turn_id=output.get("turn_id"))

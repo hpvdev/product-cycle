@@ -16,7 +16,7 @@ product-cycle = "product_cycle.cli:main"
 include = ["product_cycle*"]
 
 [tool.setuptools.package-data]
-product_cycle = ["web/*.html", "resources/*.md", "resources/roles/*.md", "skills/**/*.md", "skills/**/*.yaml"]
+product_cycle = ["web/*.html", "web/*.css", "web/*.js", "resources/*.md", "resources/roles/*.md", "skills/**/*.md", "skills/**/*.yaml"]
 
 [tool.setuptools.cmdclass]
 build_py = "build_support.BuildWithSkills"

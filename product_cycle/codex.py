@@ -88,7 +88,7 @@ class CodexClient:
         return result
 
     def run(self, project, prompt, model, effort, schema, readonly=False, network=False,
-            timeout=900, max_tokens=400000, thread_id=None):
+            timeout=900, max_tokens=None, thread_id=None, title=None):
         deadline = time.monotonic() + timeout
         self.initialize(deadline)
         config = {"model_reasoning_effort": effort}
@@ -98,6 +98,8 @@ class CodexClient:
             params.update({"threadId": thread_id, "excludeTurns": True})
         started = self.request("thread/resume" if thread_id else "thread/start", params, deadline)
         thread = started["thread"]["id"]
+        if title:
+            self.request("thread/name/set", {"threadId": thread, "name": title}, deadline)
         observed = {"thread_id": thread, "observed_model": started.get("model"),
                     "observed_effort": started.get("reasoningEffort")}
         self.on_event({"method": "client/threadReady", "params": observed})
@@ -122,7 +124,7 @@ class CodexClient:
                         texts[item.get("id", "final")] = item.get("text", "")
                 if method == "thread/tokenUsage/updated":
                     tokens = params.get("tokenUsage", {}).get("total", {}).get("totalTokens")
-                    if tokens is not None and tokens > max_tokens:
+                    if max_tokens is not None and tokens is not None and tokens > max_tokens:
                         raise WorkflowError("Phiên AI đã vượt ngân sách token.")
                 if method == "turn/completed" and params.get("turn", {}).get("id") == turn_id:
                     status = params["turn"]["status"]

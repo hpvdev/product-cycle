@@ -132,7 +132,7 @@ def defaults(model=None, effort=None):
         } for stage in STAGES + ["review", "project_setup"]},
         "gates": ["handoff"],
         "max_attempts": 2, "turn_timeout_seconds": 900,
-        "max_turn_tokens": 400000, "max_cycle_tokens": 2000000,
+        "max_turn_tokens": None, "max_cycle_tokens": None,
         "network_access": True, "verification_commands": [],
         "browser_required": False, "allowed_tools": [],
         "external_actions": "Configure only the third-party services required by the design within the user's authorized accounts and project. Do not infer authorization from a logged-in account. Develop and verify locally. VPS provisioning, deployment and external publication are deferred. No messages, paid purchases, unrelated account changes or destructive operations unless explicitly authorized.",
@@ -232,6 +232,8 @@ def validate_plan(value, requirement_ids):
         require(isinstance(task.get("depends_on"), list) and
                 all(isinstance(x, str) for x in task["depends_on"]), "Phụ thuộc chưa hợp lệ.")
         validate_commands(task.get("checks", []))
+        require(task.get("browser_required") is None or task.get("browser_required") is False,
+                "Đặt browser_required ở cấp kế hoạch cho bước nghiệm thu toàn sản phẩm; không đặt gate trình duyệt trong từng đầu việc.")
     covered = {rid for task in tasks for rid in task["requirements"]}
     require(covered == requirement_ids, "Kế hoạch chưa bao phủ toàn bộ yêu cầu.")
     edges = {task["id"]: set(task["depends_on"]) for task in tasks}

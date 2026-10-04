@@ -16,11 +16,17 @@ Dự án mới hiển thị 9 bước lớn; chuẩn bị project/common là cô
 
 Worker dùng `update_plan` khi công cụ sẵn có và giữ mã S1, S2... trong tên bước để truyền tiến độ trực tiếp. Báo completed chỉ hiển thị “Chờ kiểm chứng”. Mỗi bước cần đầu ra liên kết trong work result; reviewer đánh giá riêng bằng bằng chứng. Nếu runtime không gửi cập nhật kế hoạch, các bước chưa có báo cáo giữ trạng thái chờ cho đến khi kết quả về, không tự suy diễn bước đang chạy. Controller xác nhận kiểm tra và quyết định theo dữ liệu thực tế. Phiên cũ không có dữ liệu từng bước hiển thị “Chưa ghi chi tiết”; mở lại tạo revision mới và giữ nguyên lịch sử.
 
+Khối “Phiên thực thi” cho biết controller còn hoạt động hay đã dừng, task hiện tại, pha work/review/check, model/effort, token, thời gian và hoạt động gần nhất. Trạng thái hoạt động dựa trên khóa phiên đang được giữ, không dựa riêng vào trạng thái lưu trong database. Thời điểm hoạt động chỉ xác nhận đã nhận cập nhật, không chứng minh task đã tiến triển hay hoàn tất. Worker hiện chạy bằng Codex App Server và có thread ID lưu trong lịch sử. Các phiên được đặt tên theo sản phẩm, công việc và work/review để tìm và mở trong ứng dụng Codex; việc mở lịch sử không tự xác nhận ứng dụng đang nhận luồng cập nhật trực tiếp từ một tiến trình App Server khác. Khi mất kết nối dashboard, không tiếp tục hiển thị trạng thái cũ như một xác nhận đang chạy.
+
+Tiêu chí của đầu việc phải hoàn thành được trong phạm vi và các phụ thuộc đã xong; không yêu cầu chức năng của đầu việc phía sau. `browser_required` đặt ở cấp kế hoạch và áp dụng tại verify, sau các increment cần thiết. Giữ kiểm chứng browser thực tế cho nghiệm thu toàn sản phẩm; hoàn tất coding/review từng increment không thay thế nghiệm thu này. Kết quả bị chặn vẫn giữ đầu ra và lý do cụ thể trong lịch sử, không được coi là hoàn tất.
+
 Dự án mới có gate tại handoff và review độc lập ở từng giai đoạn trước đó. Design tạo `design.md`, `design-baseline.json` cùng hình/prototype cụ thể cho UI. Baseline chứa luồng, trạng thái, quy tắc và tiêu chí nghiệm thu. Baseline được review trước bước kỹ thuật và coding; không yêu cầu quyết định chủ sản phẩm giữa các bước trừ khi cấu hình gate có yêu cầu. Product Design/Image Gen chỉ được sử dụng nếu worker runtime có công cụ tương ứng; việc plugin có sẵn trong desktop không tự cấp nó cho app-server. Ghi rõ khả năng thiếu hoặc dùng reference đã chọn. Không có UI thì ghi hợp đồng tương tác phù hợp. Dự án cũ giữ nguyên gate và hợp đồng của kết quả đã niêm phong.
 
 ## Model và giới hạn
 
 `status` trả config và vị trí state. `config.json` trong state có model/effort riêng cho từng role, timeout, ngân sách token, số lần thử, network và các gate. Đổi cấu hình khi không có phiên chạy. Chọn model/effort tài khoản thực tế hỗ trợ. Mỗi attempt giữ cấu hình yêu cầu, thông tin app-server trả lại, thread/turn ID và token khi có.
+
+Dự án mới mặc định chỉ ghi nhận token: `max_turn_tokens` và `max_cycle_tokens` là `null`. Chỉ áp trần khi chủ động đặt số nguyên dương qua `init --max-turn-tokens N --max-cycle-tokens N` hoặc sửa config của phiên đang nghỉ; có thể đặt riêng từng trần. Các dự án cũ giữ số đã cấu hình, đặt `null` nếu muốn bỏ trần đó. Timeout 900 giây mỗi phiên và tối đa 2 lần thử mỗi revision vẫn áp dụng. Đây là lựa chọn vận hành của Product Cycle, không phải mức token do OpenAI quy định.
 
 Mặc định cho dự án mới:
 

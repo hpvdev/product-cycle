@@ -41,6 +41,10 @@ def serve(project, port=8787):
             route = urlparse(self.path).path
             if route == "/":
                 return self.reply(200, (Path(__file__).parent / "web" / "dashboard.html").read_bytes(), "text/html; charset=utf-8")
+            if route == "/dashboard.css":
+                return self.reply(200, (Path(__file__).parent / "web" / "dashboard.css").read_bytes(), "text/css; charset=utf-8")
+            if route == "/evidence-reader.js":
+                return self.reply(200, (Path(__file__).parent / "web" / "evidence-reader.js").read_bytes(), "text/javascript; charset=utf-8")
             store = Store(project)
             try:
                 if route == "/api/state":

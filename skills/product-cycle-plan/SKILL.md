@@ -7,6 +7,8 @@ description: Turn accepted product and technical decisions into dependency-order
 
 Split into user-visible increments with requirement links and observable completion criteria. Give each task relevant checks, service dependencies and acyclic work dependencies. Set browser_required when UI acceptance needs real interaction or appearance observations. Review verification argv and dependency coverage before execution.
 
+Task criteria must be achievable within the task and its completed prerequisites; a future dependent feature cannot be required even as explanatory UI copy. Set browser_required only at plan level for the final verify stage. Integrated browser observations belong after the increments needed for that interaction, not as an operator gate on every coding task.
+
 When a Product Cycle context packet is supplied, its assigned task, accepted_inputs, work_steps, output schema and artifact_directory are authoritative. Use the specified step IDs in update_plan when available; report only observed progress. Return concrete artifact links and step results. In review mode return evidence-backed step judgments instead.
 
 When invoked on its own, perform only the requested stage in the selected project. Establish the relevant inputs and authorized scope; do not restart the entire cycle or implicitly begin the next stage. Keep repository and user instructions in effect.

@@ -19,6 +19,9 @@ for line in sys.stdin:
         emit({"id": mid, "result": {"userAgent": "fixture"}})
     elif method in {"thread/start", "thread/resume"}:
         emit({"id": mid, "result": {"thread": {"id": "fixture-thread"}, "model": params["model"], "reasoningEffort": params["config"]["model_reasoning_effort"]}})
+    elif method == "thread/name/set":
+        emit({"id": mid, "result": {}})
+        emit({"method": "thread/name/updated", "params": {"threadId": params["threadId"], "threadName": params["name"]}})
     elif method == "turn/start":
         if mode == "request":
             emit({"id": 99, "method": "item/tool/requestUserInput", "params": {"threadId": "fixture-thread", "questions": []}})

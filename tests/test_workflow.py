@@ -9,7 +9,7 @@ from unittest.mock import patch
 from product_cycle.contracts import WorkflowError, validate_plan
 from product_cycle.evals import evaluate
 from product_cycle.fixtures import complete_fixture, prepare_plan
-from product_cycle.runner import execute, prompt_for, run_checks, run_cycle
+from product_cycle.runner import execute, prompt_for, run_checks, run_cycle, run_phase, thread_title
 from product_cycle.store import Store, fingerprint, digest, runner_lock, write_json
 from product_cycle.bootstrap import prepare_project, repository_state, git
 
@@ -37,6 +37,50 @@ class WorkflowTests(unittest.TestCase):
             self.store.begin("design", "work")
         self.store.decide("analysis", "approve", "Owner", "Agreed scope")
         self.assertEqual(self.store.next_task()["id"], "design")
+
+    def test_blocked_increment_keeps_its_reason_outputs_and_history(self):
+        prepare_plan(self.store, self.plan())
+        reason = "Cần dữ liệu cho đầu việc này trước khi hoàn tất."
+        task = complete_fixture(self.store, "T1", blocker=reason)
+        self.assertEqual(task["status"], "blocked")
+        self.assertEqual(task["reason"], reason)
+        self.assertEqual(task["result"]["blocker"], reason)
+        self.assertTrue(self.store.current_evidence("T1"))
+        self.assertEqual(self.store.snapshot()["execution"]["reason"], reason)
+        with self.assertRaises(WorkflowError):
+            self.store.validate_review("T1", {"decision": "approve", "summary": "Cannot accept blocker", "findings": []})
+
+    def test_execution_uses_live_lock_and_attempt_activity_not_stored_running_status(self):
+        self.assertEqual(self.store.snapshot()["execution"]["status"], "idle")
+        aid, _ = self.store.begin("analysis", "work")
+        self.store.attempt_update(aid, thread_id="worker-thread", turn_id="worker-turn", tokens=42)
+        self.store.event("analysis", "runtime.activity", {"attempt_id": aid, "item_type": "fileChange"})
+        with runner_lock(self.store):
+            execution = self.store.snapshot()["execution"]
+            self.assertTrue(execution["active"])
+            self.assertEqual(execution["phase"], "work")
+            self.assertEqual(execution["task_id"], "analysis")
+            self.assertEqual(execution["attempt"]["thread_id"], "worker-thread")
+            self.assertEqual(execution["attempt"]["tokens"], 42)
+            self.assertLess(execution["seconds_since_activity"], 3)
+            self.store.attempt_update(aid, status="completed")
+            self.store.event("analysis", "check.started", {"attempt_id": aid})
+            self.assertEqual(self.store.snapshot()["execution"]["phase"], "check")
+            self.store.event("analysis", "check.completed", {"attempt_id": aid})
+            self.assertEqual(self.store.snapshot()["execution"]["phase"], "controller")
+            self.store.attempt_update(aid, status="running")
+        execution = self.store.snapshot()["execution"]
+        self.assertFalse(execution["active"])
+        self.assertEqual(execution["status"], "interrupted")
+        self.store.recover()
+        self.assertEqual(self.store.snapshot()["execution"]["status"], "blocked")
+
+    def test_browser_gate_belongs_to_product_verification_not_increment_flags(self):
+        plan = self.plan(browser=True)
+        validate_plan(plan, {"R1"})
+        plan["tasks"][0]["browser_required"] = True
+        with self.assertRaises(WorkflowError):
+            validate_plan(plan, {"R1"})
 
     def test_real_check_is_executed_and_versioned(self):
         prepare_plan(self.store, self.plan([sys.executable, "-c", "print('observed pass')"]))
@@ -286,6 +330,59 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(steps["S1"]["status"], "reported")
         self.assertEqual(steps["S2"]["status"], "blocked")
         self.assertEqual(steps["S3"]["status"], "pending")
+
+    def test_optional_token_limits_use_the_remaining_cycle_budget(self):
+        config = self.store.config
+        self.assertIsNone(config["max_turn_tokens"])
+        self.assertIsNone(config["max_cycle_tokens"])
+        for turn_limit, cycle_limit, expected in [(None, None, None), (50, None, 50),
+                                                   (None, 100, 70), (50, 100, 50),
+                                                   (90, 100, 70), (None, 30, None)]:
+            with self.subTest(turn=turn_limit, cycle=cycle_limit):
+                config.update(max_turn_tokens=turn_limit, max_cycle_tokens=cycle_limit)
+                write_json(self.store.root / "config.json", config)
+                with patch("product_cycle.runner.prompt_for", return_value="Fixture"), \
+                        patch.object(self.store, "snapshot", return_value={"tokens": 30}), \
+                        patch("product_cycle.runner.CodexClient") as factory:
+                    client = factory.return_value.__enter__.return_value
+                    client.run.side_effect = WorkflowError("Controlled interruption")
+                    with self.assertRaises(WorkflowError):
+                        run_phase(self.store, self.store.task("analysis"), "fixture", self.base, False, factory)
+                    if cycle_limit == 30:
+                        factory.assert_not_called()
+                    else:
+                        self.assertEqual(client.run.call_args.kwargs["max_tokens"], expected)
+
+    def test_new_worker_titles_identify_project_stage_and_work_without_prompt_text(self):
+        config = {"name": "Vocab Blaster · Game bắn từ vựng"}
+        task = {"stage": "build", "role": "project_setup", "title": "Thiết lập dự án"}
+        self.assertEqual(thread_title(config, task),
+                         "Dự án: Vocab Blaster · Bước lớn: Phát triển · Công việc: Thiết lập dự án · Thực hiện")
+        task["title"] = "Ôn đúng tập từ sai và xem kết quả lượt ôn " * 10
+        title = thread_title(config, task, review=True)
+        self.assertIn("Công việc: Ôn đúng tập từ sai", title)
+        self.assertIn("… · Review", title)
+        self.assertLessEqual(len(title), 140)
+        with patch("product_cycle.runner.prompt_for", return_value="Long operating contract"), \
+                patch("product_cycle.runner.CodexClient") as factory:
+            client = factory.return_value.__enter__.return_value
+            client.run.side_effect = WorkflowError("Controlled interruption")
+            for review in (False, True):
+                with self.assertRaises(WorkflowError):
+                    run_phase(self.store, self.store.task("analysis"), "fixture", self.base, review, factory)
+                self.assertEqual(client.run.call_args.kwargs["title"],
+                                 thread_title(self.store.config, self.store.task("analysis"), review))
+
+    def test_exhausted_cycle_budget_does_not_start_an_attempt(self):
+        config = self.store.config
+        config.update(mode="live", max_cycle_tokens=30)
+        write_json(self.store.root / "config.json", config)
+        with patch.object(self.store, "snapshot", return_value={"tokens": 30}), \
+                patch("product_cycle.runner.CodexClient") as factory:
+            with self.assertRaises(WorkflowError):
+                execute(self.store, "analysis", client_factory=factory)
+        factory.assert_not_called()
+        self.assertEqual(self.store.task("analysis")["attempts"], 0)
 
     def test_all_ten_proposed_items_are_visible_before_plan_approval(self):
         plan = self.plan()

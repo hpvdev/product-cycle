@@ -363,7 +363,8 @@ class Store:
         task = self.task(tid)
         require(isinstance(result, dict) and isinstance(result.get("summary"), str) and result["summary"].strip(), "Kết quả cần có tóm tắt.")
         require(isinstance(result.get("artifacts"), list) and result["artifacts"], "Kết quả cần có đầu ra thực tế.")
-        require(result.get("blocker") is None or task["stage"] == "setup", "Công việc cần xử lý vấn đề đang chặn trước khi hoàn tất.")
+        require(result.get("blocker") is None or isinstance(result.get("blocker"), str) and result["blocker"].strip(),
+                "Cần mô tả cụ thể vấn đề đang chặn và phần cần xử lý.")
         require(isinstance(result.get("limitations"), list), "Kết quả cần khai báo giới hạn.")
         directory = self.latest_directory(tid)
         paths = []
@@ -510,7 +511,7 @@ class Store:
                 isinstance(review.get("findings"), list), "Review cần nhận xét rõ ràng.")
         if review["decision"] != "approve":
             return
-        require(not task["result"].get("blocker"), "Cần giải quyết phần cấu hình còn thiếu trước khi duyệt.")
+        require(not task["result"].get("blocker"), "Cần giải quyết vấn đề đang chặn trước khi duyệt.")
         records = self.current_evidence(tid)
         self.intact(records)
         evidence_ids = {item["id"] for item in records}
@@ -664,6 +665,42 @@ class Store:
         self.event(None, "cycle.recovered", {"tasks": recovered})
         return recovered
 
+    def execution_status(self, tasks, events):
+        import fcntl
+        from datetime import datetime, timezone
+
+        # A stored 'running' status or a leftover PID alone cannot prove a live controller.
+        with (self.root / "runner.lock").open("a+") as lock:
+            try:
+                fcntl.flock(lock.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
+            except BlockingIOError:
+                active = True
+            else:
+                active = False
+                fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        task = next((task for task in tasks if task["status"] in {"running", "reviewing"}), None)
+        row = self.db.execute("SELECT * FROM attempts ORDER BY rowid DESC LIMIT 1").fetchone()
+        attempt = dict(row) if row else None
+        activity = next((event for event in events if attempt and event["data"].get("attempt_id") == attempt["id"]
+                         and event["type"] in {"runtime.activity", "check.started", "check.completed"}), None)
+        stamp = activity["created_at"] if activity else (attempt["ended_at"] or attempt["started_at"]) if attempt else None
+        age = max(0, int((datetime.now(timezone.utc) - datetime.fromisoformat(stamp.replace("Z", "+00:00"))).total_seconds())) if stamp else None
+        phase = "check" if active and activity and activity["type"] == "check.started" else attempt["phase"] if active and attempt and attempt["status"] == "running" else "controller" if active else None
+        blocked = next((item for item in tasks if item["status"] == "blocked"), None)
+        status = "running" if active else "interrupted" if task and attempt and attempt["status"] == "running" else "blocked" if blocked else "idle"
+        activity_names = {"commandExecution": "Đang chạy công cụ", "fileChange": "Đang cập nhật tệp",
+                          "agentMessage": "Đang cập nhật kết quả", "reasoning": "Đang xử lý công việc",
+                          "mcpToolCall": "Đang dùng công cụ", "webSearch": "Đang tìm thông tin"}
+        description = activity_names.get(activity["data"].get("item_type"), "Đã nhận cập nhật từ AI") if activity else None
+        if activity and activity["type"].startswith("check."):
+            description = "Đang chạy kiểm tra theo kế hoạch" if activity["type"] == "check.started" else "Đã nhận kết quả kiểm tra"
+        return {"status": status, "active": active, "backend": "codex-app-server", "phase": phase,
+                "task_id": task["id"] if task else blocked["id"] if blocked else None,
+                "task_title": task["title"] if task else blocked["title"] if blocked else None,
+                "reason": blocked["reason"] if not active and blocked else None,
+                "attempt": attempt, "last_activity_at": stamp, "seconds_since_activity": age,
+                "activity": description}
+
     def snapshot(self, full_history=False):
         from .progress import task_progress, stage_progress, development_progress, service_progress
         tasks = self.tasks()
@@ -709,6 +746,7 @@ class Store:
                 "foundation": self.foundation(),
                 "state": cycle_state,
                 "tasks": tasks, "stages": stage_progress(tasks, config), "events": events,
+                "execution": self.execution_status(tasks, events),
                 "development": development_progress(tasks, plan, cycle_state),
                 "services": service_progress(services, tasks, readiness, architecture["status"]),
                 "delivery": {"mode": config.get("delivery_mode", "local"),
