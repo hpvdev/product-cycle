@@ -52,7 +52,7 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 400)
 
     def test_dashboard_assets_have_browser_content_types(self):
-        for route, content_type in [("/dashboard.css", "text/css"), ("/evidence-reader.js", "text/javascript")]:
+        for route, content_type in [("/dashboard.css", "text/css"), ("/evidence-reader.js", "text/javascript"), ("/workflow-canvas.js", "text/javascript"), ("/screens-view.js", "text/javascript")]:
             with self.subTest(route=route), urlopen(self.url + route, timeout=5) as response:
                 self.assertEqual(response.headers.get_content_type(), content_type)
                 self.assertGreater(len(response.read()), 0)

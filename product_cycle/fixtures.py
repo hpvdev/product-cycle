@@ -36,6 +36,8 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
                 value["tasks"][0]["services"] = value["service_ids"]
             if store.config.get("experience_checkpoint_required") and plan is None:
                 value["experience_checkpoint"] = {"task_id": "T1", "goal": "Trải nghiệm minh họa", "evaluation": ["Chỉ kiểm tra controller, chưa có sản phẩm thật"]}
+            if store.config.get("screen_design_required") and plan is None:
+                value["tasks"][0]["screen_targets"] = []
             write_json(path, value)
         elif filename == "services.json":
             write_json(path, {"services": services or []})
@@ -54,7 +56,7 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
         elif filename == "retro.json":
             write_json(path, {"observations": [], "improvements": []})
         elif filename == "design-baseline.json":
-            write_json(path, {"has_ui": False, "visual_reference": None,
+            write_json(path, {"has_ui": False, "visual_reference": None, "version": "1", "screens": [],
                               "flows": ["Ghi và đọc lại thông tin minh họa"],
                               "states": ["Thành công", "Thông tin chưa có"],
                               "rules": {"interaction": "Hợp đồng minh họa, chưa có sản phẩm thật"},

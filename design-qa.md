@@ -1,62 +1,48 @@
-# Dashboard design QA — 2026-10-04
+# Dashboard canvas design QA
 
-final result: passed
+Source visual truth: `docs/design/workflow-canvas-concept.png`.
+Implementation: http://127.0.0.1:8787/, Quy trình, selected UI/UX stage.
+Full-view evidence: `.runtime/ui-design/comparison-final.png`.
+Focused evidence: `.runtime/ui-design/comparison-detail.png`.
+Implementation screenshot: `.runtime/ui-design/dashboard-qa-final.png`.
+Expanded canvas evidence: `.runtime/ui-design/dashboard-wide.png`.
 
-## Visual truth and rendered evidence
+## Comparison scope
 
-- Selected visual: `.runtime/dashboard-design/reference.png` (Quiet Workspace, first displayed concept). The user delegated visual selection and authorized implementation.
-- Implementation: `http://127.0.0.1:8787/`, `.runtime/dashboard-design/overview.jpg`.
-- Full comparison: `.runtime/dashboard-design/comparison.jpg`; both images are included together in one comparison.
-- Focused table comparison: `.runtime/dashboard-design/comparison-focus.jpg`. This additional crop checks readable typography, row rhythm, status labels and counts.
-- CSS viewport: 1440 × 1024, devicePixelRatio 1. Source image: 1487 × 1058; returned browser screenshot: 1425 × 1013. Both were proportionally fitted into 1440 × 1024 comparison regions; no browser bezel was included.
-- State: overview, all planned work items. Live pilot at final capture: 2/4 work items verified, 52/93 confirmed steps, third work item running, product handoff pending. The reference contains illustrative counts and invented content; these were replaced by actual controller data.
+The source is a direction concept, not a literal screenshot of a real cycle. Its illustrative tasks, statuses, icons and parallel branches must not replace recorded workflow data. The implementation keeps the stage frames, connected work/step cards, light blue palette, minimap and right inspector, and adds the requested independent panel controls. Real dependency arrows and sequential steps replace invented branches. The existing token and execution summary is intentionally retained.
 
-## Findings and comparison history
+Source pixels: 1487 × 1058. Final implementation capture: 1035 × 879; measured CSS viewport: 1050 × 892. Native screenshots exclude some surrounding scroll area. Earlier captures used 1280 × 720 and a wider desktop viewport. Browser dimensions changed during inspection; these are explicitly different responsive states, not a pixel-perfect comparison. The combined inputs preserve aspect ratio and letterbox into common frames without claiming a numeric similarity score. Diagram zoom is 85%; nodes can be enlarged individually or inspected in fullscreen.
 
-1. **[P2, fixed] Overview evidence was pushed below the desktop viewport.** The initial full-view comparison showed an oversized activity panel. Moved execution status into the project header, reduced overview table details and placed evidence under the plan in the left grid column. The final combined comparison shows the evidence heading and cards in the first viewport.
-2. **[P2, fixed] HTML reference rendered an empty main area.** Initial prototype capture showed that removing all scripts also removed the reference's screen rendering. The reader now permits inline prototype behavior in an opaque-origin sandbox, without same-origin access. External scripts, embedded frames, forms and links are removed; the frame's CSP restricts resource loading. The saved prototype capture shows the pause screen, and changing the screen selector was observed.
-3. **[P2, fixed] Narrow layout overflowed the page.** At a 390 × 844 override, the document's width was 604px while its available content width was 375px. Added zero-minimum grid tracks and child minimum widths. Post-fix measured page width and content width both equal 375px. Evidence: `narrow.jpg` and `narrow-reader.jpg`.
-4. **[P2, fixed] Polling could close expanded specification sections.** Specification and document-library rendering now retain their DOM until their relevant data changes. The evidence reader remains separate from polling; its selected content and scroll position are preserved.
+## Findings and fixes
+
+- [P1, fixed] The expanded execution report and duplicate overview placed the canvas below the fold. Full reports remain available in Overview; the graph pages now keep a compact status header.
+- [P2, fixed] Initial stage fitting reduced text to 57%. Initial focus now retains a readable minimum zoom; fit-all remains available for orientation. Work and step cards were increased in height to avoid clipped names.
+- [P2, fixed] The screen gallery initially stacked its inspector beneath the canvas. The layout now uses two columns and honors its empty/hidden state.
+- [P2, fixed] The canvas minimum height pushed its minimap below the viewport. Available height is now measured from its visible position, and the inspector follows the canvas height. The expanded-canvas screenshot shows the minimap and controls in view.
+- [P2, fixed] New screen-design wording described legacy completed work as a completed image bundle. Progress labels now follow the legacy contract when that policy is absent; sealed cycle evidence was not rewritten.
 
 ## Required fidelity surfaces
 
-| Surface | Assessment |
-| --- | --- |
-| Fonts and typography | System sans serif with Vietnamese support. Navy headings, restrained weights, 13–15px dashboard content and larger document headings. Table crop confirms labels and wrapping remain readable. |
-| Spacing and layout | Sidebar, three summary metrics, plan at left, stages at right, evidence below plan. Separate workflow and document views reduce nested content. Header accommodates genuine activity status and last update. |
-| Colors and tokens | Light neutral canvas, white surfaces, indigo selection/action, green verification and amber attention. Restrained borders and 8–10px radii. |
-| Images and assets | Actual registered image evidence is displayed without cropping or stretching. No invented avatar, brand mark, document size, PDF preview or decorative illustration from the generated mock was carried into the live product. Navigation uses clear text labels rather than substitute artwork. |
-| Copy and content | Real project titles, criteria, dependencies, revisions and evidence replace generated examples. Task verification and product acceptance remain distinct. Original document content is preserved; the reader changes presentation only. |
+- Typography: native system sans-serif is retained deliberately. Stage, work and step names have distinct weights and sizes; longer names wrap and exact text remains available in the inspector. The concept did not supply an authoritative font file. No claim of exact font matching.
+- Spacing/layout: outlined stage frames contain a larger work card and connected step cards. Readable node sizes take priority over squeezing all recorded nodes onto one screen. At narrow desktop widths, pan/zoom, fit, fullscreen and hiding either panel keep the full graph reachable.
+- Colors: pale blue stage backgrounds, white cards, blue selection borders and distinct green/amber recorded states preserve the selected direction. State colors follow actual results rather than the concept's illustrative pending states.
+- Image quality: diagram geometry is a code-native data visualization. Concept icons were intentionally omitted rather than copied as decorative raster content. The separate screen gallery displays registered reference/render images without flattening the workflow into an image; opening an image uses the existing evidence reader.
+- Content: all recorded stages, tasks and small steps are shown. The current cycle's legacy design is not presented as a newly approved image bundle. The gallery clearly distinguishes proposal/approval, worker comparison, independent review and historical captures.
 
-## Primary interactions observed
+## Comparison history and checks
 
-- Sidebar navigation and filtering the plan to active work.
-- Selecting a planned task opens its stage, work item and micro steps, with criteria and evidence alongside.
-- Evidence-library stage filter.
-- JSON displayed as requirements and acceptance lists; Markdown displayed as headings, lists and tables.
-- Registered image displayed in the reader.
-- HTML prototype displayed in a sandbox; switching its screen selector changes the rendered screen.
-- Reader close, original-file links and evidence URL selection.
-- Narrow-screen document reader has visible close/original controls and independently scrollable content.
-- Captured browser error log was empty.
+Initial screenshot: `.runtime/ui-design/dashboard-before.png`. First rendered comparison and fixes are above; intermediate capture: `.runtime/ui-design/dashboard-after.png`. Post-fix combined source/render input and focused input were inspected together before this report. Final expanded-panel capture verifies the viewport repair.
 
-## Validation and limits
+Browser checks: select an actual small step and inspect its evidence; hide/restore each panel; fit; zoom; pan; enter/exit fullscreen; navigate to the legacy gallery empty state. On an isolated synthetic cycle, inspect a registered reference/render pair, a self-transition, an evidence image dialog and a linked build task. Browser error logs were empty. The synthetic fixture verifies dashboard bindings, not actual product fidelity, interaction quality or autonomous delivery.
 
-- 61 existing/controller server tests passed. These use synthetic products and do not establish game quality or autonomous product delivery.
-- JavaScript syntax checks passed; targeted formatting/escaping checks covered raw markup, unsafe Markdown links and structured data.
-- A temporary wheel build includes dashboard HTML, CSS and JavaScript.
-- Codex links contain the real recorded thread IDs. Continuous native Codex chat streaming and the browser's protocol launch were not verified by this dashboard QA.
-- Remote-resource-dependent HTML, PDFs and arbitrary diagram languages are not converted into standalone interactive models. PDF evidence opens in the browser's reader; self-contained HTML and image models are previewed here.
-- No delivery approval, real product cycle, account configuration or deployment was triggered to validate the dashboard.
+## Remaining limits
 
-## Implementation checklist
+The real Vocab Blaster cycle predates the per-screen image contract. Its visual quality has not been repaired or reaccepted by this dashboard change. It still needs a newly reviewed screen bundle to use the gallery as its design source of truth. Group collapsing and a user-edited graph are outside this read-only dashboard scope.
 
-- [x] Resolve visual direction and replace illustrative content with genuine data.
-- [x] Preserve macro stage → work item → micro step hierarchy.
-- [x] Implement readable evidence previews and retain original provenance.
-- [x] Repair identified P2 issues and compare revised rendered evidence.
-- [x] Keep the local dashboard open; restore the browser viewport.
+Final result: passed
 
-## Follow-up polish
+No remaining actionable P0/P1/P2 finding within the requested dashboard capability. This is a design-direction and interaction review, not a claim of pixel-perfect replication or approval of Vocab Blaster.
 
-No blocking visual findings remain. A later iteration may add more document-format-specific layouts if actual project evidence requires them.
+## Inspector follow-up
+
+[P1, fixed] Fullscreen previously expanded only the diagram element, excluding the inspector. It now expands the diagram layout and inspector together. A visible “Hiện chi tiết / Ẩn chi tiết” toolbar button works in normal and fullscreen views. Selecting a work/step node also restores its inspector. Browser verification covered selecting an actual small step with the inspector initially hidden, showing its description and evidence within fullscreen, toggling the inspector twice, and exiting fullscreen with the selection retained. No browser errors observed. Evidence: `.runtime/ui-design/dashboard-detail-fullscreen.png`. JavaScript syntax checks and diff whitespace checks passed. No cycle task was resumed or evidence changed for this verification.

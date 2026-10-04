@@ -16,6 +16,12 @@
 
 Nguồn là nền tảng thiết kế, không chứng minh gói đạt chất lượng trên mọi dự án. Kiểm tra controller, adapter thật và áp dụng dự án là ba mức xác minh riêng.
 
+## Frontend hiện hành
+
+Đối chiếu ngày 04/10/2026: đóng gói [Frontend App Builder](https://github.com/openai/plugins/tree/5fd93af4cd0c623e020d0cc7e9ce178b4ac1f70f/plugins/build-web-apps/skills/frontend-app-builder) từ repo `openai/plugins`, commit `5fd93af4cd0c623e020d0cc7e9ce178b4ac1f70f`, là HEAD được quan sát khi cập nhật. Giữ nguyên skill, metadata và reference nguồn. Phiên bản được cố định để tái lập; không tuyên bố luôn là mới nhất về sau hoặc là một thay thế được OpenAI xác nhận.
+
+Không đóng gói `frontend-skill` đã bị gỡ khỏi danh sách curated của `openai/skills`. [Hướng dẫn model hiện hành](https://developers.openai.com/api/docs/guides/latest-model) và [Rethinking skills and prompts](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra) là nguồn để cập nhật prompting và giữ hướng dẫn đúng phạm vi. Product Cycle chỉ nạp hướng dẫn frontend cho công việc có UI; quyết định chủ sản phẩm, mẫu đã duyệt, stack và bằng chứng của workflow vẫn là chuẩn. Gen thêm concept khi chi tiết mới chưa rõ, tái sử dụng hệ thiết kế khi đã rõ; so sánh ảnh render thật trong phạm vi kiểm chứng được phép. Đây là cách tích hợp của Product Cycle, chưa chứng minh sản phẩm đầu ra đẹp hoặc đạt nghiệm thu.
+
 ## Phân biệt nguồn và quyết định của gói
 
 **Có nguồn OpenAI:** mục tiêu và tiêu chí đo được; công việc có phạm vi và phụ thuộc; kế hoạch khác với bằng chứng đã quan sát; giữ quyết định/ngữ cảnh để tiếp tục; đánh giá skill bằng kết quả, quá trình, phong cách và hiệu suất. Cookbook là ví dụ có thể điều chỉnh, không phải một quy trình SDLC duy nhất được OpenAI chứng nhận.

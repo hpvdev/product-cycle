@@ -46,10 +46,10 @@ WORK_STEPS = {
         ("Viết yêu cầu và tiêu chí", "Mỗi yêu cầu có hành vi quan sát được để nghiệm thu."),
     ],
     "design": [
-        ("Vẽ luồng thao tác", "Liên kết hành trình chính với yêu cầu đã chốt."),
+        ("Xác định màn hình và luồng thao tác", "Liệt kê màn hình, tab, trạng thái và đường chuyển theo yêu cầu đã chốt."),
         ("Khảo sát hướng thiết kế", "Dùng thiết kế hiện có hoặc tạo phương án bằng Product Design và Image Gen khi công cụ sẵn có."),
-        ("Thử và đề xuất mốc thiết kế", "Chuẩn bị prototype phù hợp, lấy phản hồi trong Codex và lưu bản cụ thể để bạn chốt."),
-        ("Bổ sung trạng thái màn hình", "Mô tả dữ liệu, trống, tải, lỗi và hoàn thành theo tính năng."),
+        ("Thiết kế bộ ảnh màn hình", "Dùng hướng đã chọn để tạo ảnh từng màn hình; lấy phản hồi trong Codex và lưu bản để bạn duyệt."),
+        ("Hoàn thiện trạng thái và tài nguyên", "Thiết kế trạng thái cần thiết, bố cục theo thiết bị và hình minh họa dùng trong sản phẩm."),
         ("Chốt quy tắc và cách nghiệm thu", "Ghi màu, font, khoảng cách, bố cục thích ứng và tiêu chí so sánh."),
     ],
     "architecture": [
@@ -70,7 +70,7 @@ WORK_STEPS = {
         ("Đọc đầu vào và tái hiện", "Đọc yêu cầu, mốc thiết kế và code liên quan; tái hiện lỗi nếu đang sửa bug."),
         ("Triển khai trong phạm vi", "Dùng mẫu hiện có và chỉ sửa phần phục vụ công việc."),
         ("Hoàn thiện hành vi và trạng thái", "Đáp ứng luồng chính cùng các trường hợp cần thiết."),
-        ("Đối chiếu thay đổi", "Xem lại phần code đã sửa, đầu ra và hạn chế trước khi gửi kiểm chứng."),
+        ("Đối chiếu giao diện và hành vi", "Chụp màn hình thật, so với đúng mẫu đã duyệt và sửa sai lệch; kiểm tra logic theo đặc tả."),
     ],
     "verify": [
         ("Lập đối chiếu yêu cầu", "Liên kết từng tiêu chí nghiệm thu với cách kiểm chứng."),
@@ -96,9 +96,26 @@ WORK_STEPS = {
 }
 
 
-def work_steps(stage):
+# Keep historical progress labels faithful to the contract that was actually run.
+LEGACY_SCREEN_STEPS = {'build': [('Đọc đầu vào và tái hiện',
+            'Đọc yêu cầu, mốc thiết kế và code liên quan; tái hiện lỗi nếu đang sửa bug.'),
+           ('Triển khai trong phạm vi', 'Dùng mẫu hiện có và chỉ sửa phần phục vụ công việc.'),
+           ('Hoàn thiện hành vi và trạng thái', 'Đáp ứng luồng chính cùng các trường hợp cần thiết.'),
+           ('Đối chiếu thay đổi', 'Xem lại phần code đã sửa, đầu ra và hạn chế trước khi gửi kiểm chứng.')],
+ 'design': [('Vẽ luồng thao tác', 'Liên kết hành trình chính với yêu cầu đã chốt.'),
+            ('Khảo sát hướng thiết kế',
+             'Dùng thiết kế hiện có hoặc tạo phương án bằng Product Design và Image Gen khi công cụ sẵn có.'),
+            ('Thử và đề xuất mốc thiết kế',
+             'Chuẩn bị prototype phù hợp, lấy phản hồi trong Codex và lưu bản cụ thể để bạn chốt.'),
+            ('Bổ sung trạng thái màn hình', 'Mô tả dữ liệu, trống, tải, lỗi và hoàn thành theo tính năng.'),
+            ('Chốt quy tắc và cách nghiệm thu',
+             'Ghi màu, font, khoảng cách, bố cục thích ứng và tiêu chí so sánh.')]}
+
+
+def work_steps(stage, screen_design=True):
+    definitions = WORK_STEPS[stage] if screen_design else LEGACY_SCREEN_STEPS.get(stage, WORK_STEPS[stage])
     return [{"id": "S" + str(i + 1), "title": title, "description": description}
-            for i, (title, description) in enumerate(WORK_STEPS[stage])]
+            for i, (title, description) in enumerate(definitions)]
 CRITERIA = {
     "project_setup": ["Cấu trúc, môi trường, coding rules và phần dùng chung đáp ứng thiết kế.",
                       "Công cụ và kiểm tra dự án nền chạy thành công; có hướng dẫn dùng local."],
@@ -132,6 +149,7 @@ def defaults(model=None, effort=None):
         } for stage in STAGES + ["review", "project_setup"]},
         "executor": "codex-desktop", "dashboard_read_only": True,
         "collaborative_product": True, "experience_checkpoint_required": True,
+        "screen_design_required": True,
         "gates": ["analysis", "design", "handoff"], "task_gates": [],
         "max_attempts": 2, "turn_timeout_seconds": 900,
         "max_turn_tokens": None, "max_cycle_tokens": None,

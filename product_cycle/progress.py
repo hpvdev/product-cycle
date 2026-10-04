@@ -17,7 +17,7 @@ def task_progress(task, tasks, config, events, decisions, root):
     result_steps = {step["id"]: step for step in (task.get("result") or {}).get("steps", [])}
     review_steps = {step["id"]: step for step in (task.get("review") or {}).get("steps", [])}
     steps = []
-    for definition in work_steps(task["role"]):
+    for definition in work_steps(task["role"], config.get("screen_design_required", False)):
         step = dict(definition, status=base, source="controller", note="", evidence=[], updated_at=None)
         for event in events:
             if event["type"] == "step.progress" and event["data"].get("step") == step["id"]:
@@ -45,7 +45,7 @@ def task_progress(task, tasks, config, events, decisions, root):
     artifact_refs = [item["id"] for item in evidence if item["kind"] == "artifact"]
     add("outputs", "Kiểm tra đầu ra", "Đối chiếu cấu trúc, file bắt buộc và liên kết bằng chứng.",
         "done" if task.get("result") else "blocked" if work and work["status"] == "failed" else base,
-        refs=artifact_refs)
+        "Đã kiểm tra đủ tài liệu và liên kết. Chất lượng thiết kế được đánh giá riêng; bước này không xác nhận giao diện giống mẫu." if task.get("result") else "", refs=artifact_refs)
     commands = task["checks"] if task["stage"] in {"build", "setup", "project_setup"} else config.get("verification_commands", []) if task["stage"] == "verify" else []
     for index, command in enumerate(commands):
         reports = []
@@ -88,7 +88,7 @@ def task_progress(task, tasks, config, events, decisions, root):
     status = {"approve": "done", "rework": "rework", "blocked": "blocked"}.get(review.get("decision"),
         "running" if latest_review and latest_review["status"] == "running" else "blocked" if latest_review else base)
     add("review", "Review độc lập", "Đánh giá từng bước và tiêu chí trên đầu ra thực tế.", status, review.get("summary", ""), source="reviewer")
-    if task["stage"] in config["gates"] or task["id"] in config.get("task_gates", []):
+    if task.get("owner_gate") or task["stage"] in config["gates"] or task["id"] in config.get("task_gates", []):
         decision = next((item for item in reversed(decisions) if item["task_id"] == task["id"] and item["revision"] == task["revision"]), None)
         status = "done" if decision and decision["action"] == "approve" and task["status"] == "done" else "rework" if decision and decision["action"] == "reject" else "awaiting_approval" if task["status"] == "awaiting_approval" else "untracked" if task["status"] == "done" else base
         add("approval", "Chủ sản phẩm duyệt kết quả", "Xem đầu ra, bằng chứng và hạn chế trước khi chấp nhận.", status,
@@ -104,9 +104,9 @@ def stage_progress(tasks, config):
             continue
         steps = [step for task in children for step in task["steps"]]
         if not children:
-            steps = [dict(step, status="waiting", source="controller", note="", evidence=[], updated_at=None) for step in work_steps(stage)]
+            steps = [dict(step, status="waiting", source="controller", note="", evidence=[], updated_at=None) for step in work_steps(stage, config.get("screen_design_required", False))]
             if stage == "setup" and any(task["id"] == "plan" and task["status"] == "done" for task in tasks):
-                steps = [dict(step, status="not_required", source="controller", note="Kế hoạch không cần dịch vụ bên thứ ba.", evidence=[], updated_at=None) for step in work_steps(stage)]
+                steps = [dict(step, status="not_required", source="controller", note="Kế hoạch không cần dịch vụ bên thứ ba.", evidence=[], updated_at=None) for step in work_steps(stage, config.get("screen_design_required", False))]
         counted = [step for step in steps if step["status"] != "not_required"]
         completed = sum(step["status"] == "done" for step in counted)
         status = "pending"

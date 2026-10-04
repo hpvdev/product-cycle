@@ -59,8 +59,34 @@ def prompt_for(store, task, directory, review=False):
     if installed_skill.is_file():
         guide = installed_skill.read_text() + "\n\n" + guide
     packet = context(store, task)
+    ui_work = role == "design"
+    if role in {"build", "verify"}:
+        for accepted in packet["accepted_inputs"]:
+            if accepted["task"] == "design":
+                for artifact in accepted["artifacts"]:
+                    if Path(artifact["original_path"]).name == "design-baseline.json":
+                        ui_work = json.loads(Path(artifact["path"]).read_text()).get("has_ui") is True
+    if ui_work:
+        frontend = store.project / ".agents" / "skills" / "frontend-app-builder" / "SKILL.md"
+        if not frontend.is_file():
+            frontend = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "skills" / "frontend-app-builder" / "SKILL.md"
+        packet["frontend_skill"] = {"name": "frontend-app-builder", "path": str(frontend) if frontend.is_file() else None}
+        guide += ("\nFor UI work, read frontend_skill.path when available and only its references relevant to this surface. "
+                  "In design, use concept guidance; in build, reuse the owner-approved baseline and use implementation guidance; "
+                  "in verify, use the concept-to-render comparison guidance. Skip it for products without UI. "
+                  "The assigned stage, accepted scope, stack, checks and owner decisions remain authoritative. "
+                  "Do not regenerate accepted concepts or restart design in a build/verify task. "
+                  "Retain registered evidence; do not delete it as temporary QA. A subjective fidelity score never establishes acceptance. "
+                  "Record missing tools or observations honestly instead of claiming visual verification.")
     packet["artifact_directory"] = str(directory)
     packet["required_files"] = list(FILES.get(task["role"], []))
+    if store.config.get("screen_design_required"):
+        packet["screen_design_contract"] = str(RESOURCES / "screen-design.md")
+        if task["role"] in {"build", "verify"}:
+            packet["screen_targets"] = store.screen_targets(task["id"])
+            if packet["screen_targets"]:
+                packet["required_files"] += ["screen-comparisons.json"]
+        guide += "\nRead screen_design_contract for the assigned stage. Use the accepted screen/state references exactly; never demote approved images to style exploration or replace them with a simpler prototype. Report tool gaps as blockers; do not fabricate screen captures or owner approval."
     if task["stage"] == "analysis" and store.config.get("collaborative_product"):
         packet["required_files"] += ["product-direction.json"]
     if store.config.get("service_setup_required") and task["stage"] == "architecture":

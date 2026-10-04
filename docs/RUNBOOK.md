@@ -6,7 +6,9 @@
 
 Brief cần: người dùng, vấn đề, kết quả, phạm vi, ràng buộc, những gì chưa biết. Dùng `init` cho project được chọn; `serve` mở dashboard; `run` bắt đầu công việc sẵn sàng. Kiểm tra trước rằng project và PRODUCT_CYCLE_HOME là vị trí mong muốn.
 
-Skill cài theo project: `python3 scripts/install_skill.py --project /absolute/product`. Script cài 1 skill điều phối và 11 skill chuyên môn (9 bước lớn, một skill chuẩn bị code và review độc lập) vào `.agents/skills/`. Nó kiểm tra xung đột trước khi sao chép, không ghi đè skill có sẵn và không sửa thiết lập Codex toàn cục. Bộ controller vẫn chạy từ repository hoặc executable đã cài.
+Skill cài theo project: `python3 scripts/install_skill.py --project /absolute/product`. Script cài 1 skill điều phối, 11 skill chuyên môn (9 bước lớn, một skill chuẩn bị code và review độc lập) và Frontend App Builder vào `.agents/skills/`. Nó kiểm tra xung đột trước khi sao chép, không ghi đè skill có sẵn và không sửa thiết lập Codex toàn cục. Bộ controller vẫn chạy từ repository hoặc executable đã cài.
+
+Frontend App Builder hỗ trợ concept trong Thiết kế, dùng mẫu đã duyệt trong Phát triển và so sánh concept với ảnh render trong Nghiệm thu. Prompt cung cấp đường dẫn skill cho Thiết kế và cho công việc Phát triển/Nghiệm thu khi baseline đã chốt có UI; backend và reviewer không tự nhận toàn bộ hướng dẫn frontend. Ưu tiên skill theo project, sau đó skill cá nhân nếu có; thiếu skill hoặc công cụ thì ghi nhận hạn chế. Giữ scope, stack, schema, bằng chứng và quyết định chủ sản phẩm của workflow; không tự coi điểm tự chấm là nghiệm thu. Cycle cũ không tự được ghi đè skill đã cài.
 
 Một project mới dùng `init --project /absolute/product --brief /absolute/brief.md --name "Tên sản phẩm"`, sau đó `serve --project /absolute/product` để xem dashboard và `run --project /absolute/product` từ terminal khác để thực thi. `init` tự chuẩn bị Git, file loại trừ, hướng dẫn chung và bộ skill trước khi bắt đầu phân tích. Không tự commit/push hoặc đổi Git có sẵn. Mỗi project có kho trạng thái riêng ngoài thư mục worker được ghi.
 
@@ -26,7 +28,7 @@ Trong các dashboard cũ cho phép điều khiển, nút “Tiếp tục quy tr�
 
 Tiêu chí của đầu việc phải hoàn thành được trong phạm vi và các phụ thuộc đã xong; không yêu cầu chức năng của đầu việc phía sau. `browser_required` đặt ở cấp kế hoạch và áp dụng tại verify, sau các increment cần thiết. Giữ kiểm chứng browser thực tế cho nghiệm thu toàn sản phẩm; hoàn tất coding/review từng increment không thay thế nghiệm thu này. Kết quả bị chặn vẫn giữ đầu ra và lý do cụ thể trong lịch sử, không được coi là hoàn tất.
 
-Dự án mới có gate tại phân tích, UX/UI, mốc trải nghiệm cốt lõi và handoff và review độc lập ở từng giai đoạn trước đó. Design tạo `design.md`, `design-baseline.json` cùng hình/prototype cụ thể cho UI. Baseline chứa luồng, trạng thái, quy tắc và tiêu chí nghiệm thu. Baseline được review rồi chủ sản phẩm chốt trong Codex trước bước kỹ thuật và coding. Product Design/Image Gen chỉ được sử dụng nếu worker runtime có công cụ tương ứng; việc plugin có sẵn trong desktop không tự cấp nó cho app-server. Ghi rõ khả năng thiếu hoặc dùng reference đã chọn. Không có UI thì ghi hợp đồng tương tác phù hợp. Dự án cũ giữ nguyên gate và hợp đồng của kết quả đã niêm phong.
+Dự án mới có gate tại phân tích, UX/UI, mốc trải nghiệm cốt lõi và handoff và review độc lập ở từng giai đoạn trước đó. Design tạo `design.md`, `design-baseline.json` cùng bộ ảnh đăng ký theo từng màn hình, trạng thái và kích thước. Baseline chứa luồng, trạng thái, quy tắc và tiêu chí nghiệm thu. Baseline được review rồi chủ sản phẩm chốt trong Codex trước bước kỹ thuật và coding. Product Design/Image Gen chỉ được sử dụng nếu worker runtime có công cụ tương ứng; việc plugin có sẵn trong desktop không tự cấp nó cho app-server. Ghi rõ khả năng thiếu hoặc dùng reference đã chọn. Không có UI thì ghi hợp đồng tương tác phù hợp. Dự án cũ giữ nguyên gate và hợp đồng của kết quả đã niêm phong.
 
 ## Model và giới hạn
 
@@ -115,3 +117,11 @@ Mặc định mới: executor=codex-desktop, dashboard_read_only=true, gates g�
 `configure --project ... --executor codex-desktop` chuyển cycle cũ khi không còn phiên đang chạy. Giữ nguyên kết quả và gate cũ. Áp dụng phân tích/thiết kế cộng tác cho sản phẩm cũ phải mở lại phạm vi có sự đồng ý của chủ sản phẩm; không retroactively tạo quyết định.
 
 Token native được đọc từ bộ đếm trong session local do Codex ghi khi có, kiểm tra đúng chat/project. Khi gắn chat, ghi baseline; các lần đồng bộ cập nhật phần tăng thêm và không cộng trùng. Đây là đường đọc tương thích theo phiên bản, không phải API billing. Baseline hoặc bộ đếm thiếu hiển thị chưa đầy đủ. Model/effort yêu cầu trong packet không chứng minh Codex App đã áp dụng nó; dữ liệu chưa quan sát giữ là chưa ghi nhận. Ngân sách native chỉ kiểm tra tại ranh giới dispatch, không tự ngắt lượt đang chạy trong ứng dụng.
+
+## Bộ màn hình và sơ đồ trên dashboard
+
+Dự án mới bật `screen_design_required: true`. Hợp đồng trong [screen-design.md](../product_cycle/resources/screen-design.md) định nghĩa `screens`, tài nguyên và đường chuyển của baseline; kế hoạch khai `screen_targets` cho mỗi task UI. Mẫu được chủ sản phẩm duyệt trong Codex. Build và Verify phải đăng ký ảnh giao diện thật và `screen-comparisons.json`, đúng phiên bản mẫu, hash ảnh và fingerprint source. Review độc lập phải dẫn báo cáo và các ảnh thật ngoài bằng chứng chức năng. Ảnh và báo cáo không chứng minh thao tác tương tác đã hoạt động; kiểm chứng trình duyệt cuối vẫn áp dụng riêng.
+
+Mục **Quy trình** nối giai đoạn → công việc → bước nhỏ; nét đứt là phụ thuộc thật giữa công việc. Có kéo nền, thu phóng, vừa khung, toàn màn hình, ẩn/hiện thanh trái và chi tiết phải. Mục **Màn hình & luồng** hiển thị ảnh từng trạng thái và đường chuyển; chọn một ảnh để xem mẫu cạnh ảnh giao diện thật và công việc liên quan. Dashboard đọc bằng chứng đã ghi, không tự tạo quyết định duyệt.
+
+Cycle cũ không tự đổi hợp đồng hoặc ghi lại lịch sử thành đã duyệt bộ ảnh. Nếu chưa có `screens`, dashboard báo rõ thiếu bộ ảnh. Để áp dụng cho cycle cũ, cài cập nhật workflow theo quy tắc giữ file hiện có, bật `screen_design_required` rồi mở lại Design và các phần phụ thuộc trong Codex; phải tạo và duyệt bộ thiết kế mới trước khi chạy kế hoạch mới. Không sửa bằng chứng đã niêm phong để lấp phần thiếu.

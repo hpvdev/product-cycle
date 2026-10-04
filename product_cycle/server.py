@@ -90,6 +90,8 @@ def serve(project, port=8787):
                 return self.reply(200, (Path(__file__).parent / "web" / "dashboard.css").read_bytes(), "text/css; charset=utf-8")
             if route == "/evidence-reader.js":
                 return self.reply(200, (Path(__file__).parent / "web" / "evidence-reader.js").read_bytes(), "text/javascript; charset=utf-8")
+            if route in {"/workflow-canvas.js", "/screens-view.js"}:
+                return self.reply(200, (Path(__file__).parent / "web" / route[1:]).read_bytes(), "text/javascript; charset=utf-8")
             store = Store(project)
             try:
                 if route == "/api/state":

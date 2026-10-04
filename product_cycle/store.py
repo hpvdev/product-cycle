@@ -102,7 +102,7 @@ class Store:
             config.update(service_setup_required=False, project_setup_required=False, bootstrap_required=False,
                           gates=["analysis", "design", "plan", "handoff"],
                           executor="codex-app-server", dashboard_read_only=False,
-                          collaborative_product=False, experience_checkpoint_required=False)
+                          collaborative_product=False, experience_checkpoint_required=False, screen_design_required=False)
         write_json(root / "config.json", config)
         if preparation:
             preparation["prepared_at"] = now()
@@ -398,7 +398,7 @@ class Store:
             filenames = filenames + ["services.json"]
         if self.config.get("project_setup_required") and task["stage"] == "architecture":
             filenames = filenames + ["project-setup.json"]
-        if task["stage"] == "design" and not tracking and steps is None:
+        if task["stage"] == "design" and not tracking and steps is None and not self.config.get("screen_design_required"):
             filenames = ["design.md"]
         for filename in filenames:
             require(directory / filename in paths, "Thiếu đầu ra bắt buộc: " + filename)
@@ -413,6 +413,9 @@ class Store:
                 reference = baseline.get("visual_reference")
                 require(isinstance(reference, str) and reference in {item["path"] for item in result["artifacts"]}, "Cần đầu ra trực quan đã đăng ký để duyệt thiết kế.")
                 require(self.safe_path(reference).suffix.lower() in {".png", ".jpg", ".jpeg", ".webp", ".html", ".pdf", ".svg"}, "Mốc thiết kế cần ảnh, prototype hoặc tài liệu trực quan.")
+            if self.config.get("screen_design_required"):
+                from .screens import validate_screen_design
+                validate_screen_design(baseline, self.requirement_ids(), dict(zip((item["path"] for item in result["artifacts"]), paths)))
         if task["stage"] == "analysis":
             requirements = validate_requirements(json_object(directory / "requirements.json"))
             if self.config.get("collaborative_product"):
@@ -421,6 +424,9 @@ class Store:
         if task["stage"] == "plan":
             plan = json_object(directory / "plan.json")
             validate_plan(plan, self.requirement_ids())
+            if self.config.get("screen_design_required"):
+                from .screens import validate_screen_plan
+                validate_screen_plan(plan, self.sealed_document("design", "design-baseline.json"))
             if self.config.get("experience_checkpoint_required"):
                 from .contracts import validate_experience_checkpoint
                 validate_experience_checkpoint(plan)
@@ -448,7 +454,31 @@ class Store:
                 case = improvement["eval_case"]
                 require(isinstance(case, dict) and isinstance(case.get("input"), str) and case["input"].strip() and
                         isinstance(case.get("expected"), str) and case["expected"].strip(), "Tình huống đánh giá cần input và expected rõ ràng.")
+        if self.config.get("screen_design_required") and task["role"] in {"build", "verify"}:
+            targets = self.screen_targets(tid)
+            report_path = directory / "screen-comparisons.json"
+            if targets and (not result.get("blocker") or report_path in paths):
+                from .screens import validate_screen_comparisons
+                require(report_path in paths, "Cần lưu ảnh giao diện thật và kết quả đối chiếu với mẫu đã duyệt.")
+                baseline = self.sealed_document("design", "design-baseline.json")
+                validate_screen_comparisons(json_object(report_path), baseline, targets,
+                    dict(zip((item["path"] for item in result["artifacts"]), paths)), fingerprint(self.project), digest,
+                    {record["source"]: record for record in self.current_evidence("design")}, bool(result.get("blocker")))
         return paths
+
+    def screen_targets(self, tid):
+        from .screens import design_targets, target_key
+        task = self.task(tid)
+        if not self.config.get("screen_design_required") or task["role"] not in {"build", "verify"}:
+            return []
+        baseline = self.sealed_document("design", "design-baseline.json")
+        targets = design_targets(baseline)
+        if task["role"] == "build":
+            plan = self.approved_plan()
+            item = next(item for item in plan["tasks"] if item["id"] == tid)
+            selected = {target_key(target) for target in item["screen_targets"]}
+            targets = [target for target in targets if target_key(target) in selected]
+        return targets
 
     def requirement_ids(self):
         task = self.task("analysis")
@@ -536,6 +566,14 @@ class Store:
             require(row.get("passed") is True and isinstance(row.get("evidence"), list) and row["evidence"] and
                     all(isinstance(eid, str) and eid in evidence_ids for eid in row["evidence"]) and row.get("reason"), "Tiêu chí chưa đạt hoặc chưa có bằng chứng hợp lệ.")
             require(any(row["id"] in item["criteria"] for item in records if item["id"] in row["evidence"]), "Bằng chứng chưa liên kết với tiêu chí được review.")
+        if self.config.get("screen_design_required") and task["role"] in {"build", "verify"} and self.screen_targets(tid):
+            self.validate_outputs(tid, task["result"])
+            report = self.sealed_document(tid, "screen-comparisons.json")
+            required_sources = {row["rendered_image"] for row in report["comparisons"]}
+            required_sources.add(str(self.latest_directory(tid).relative_to(self.project) / "screen-comparisons.json"))
+            required_refs = {item["id"] for item in records if item["source"] in required_sources}
+            cited = {eid for row in rows for eid in row.get("evidence", [])}
+            require(required_refs <= cited, "Review cần xem và dẫn bằng chứng đối chiếu của từng màn hình, ngoài kiểm tra chức năng.")
         if task["result"].get("steps") is not None:
             results = {step["id"]: step for step in task["result"]["steps"]}
             step_reviews = review.get("steps")
@@ -574,7 +612,8 @@ class Store:
         return []
 
     def owner_gate(self, task):
-        return task["stage"] in self.config["gates"] or task["id"] in self.config.get("task_gates", [])
+        return (task["stage"] == "design" and self.config.get("screen_design_required", False) or
+                task["stage"] in self.config["gates"] or task["id"] in self.config.get("task_gates", []))
 
     def owner_input(self, tid, actor, note):
         task = self.task(tid)
@@ -825,6 +864,7 @@ class Store:
         from .progress import task_progress, stage_progress, development_progress, service_progress
         tasks = self.tasks()
         config = self.config
+        current_source = None
         progress_events = [dict(row) for row in self.db.execute("SELECT task_id,type,data,created_at FROM events WHERE type IN ('steps.started','step.progress') ORDER BY id")]
         for event in progress_events:
             event["data"] = json.loads(event["data"])
@@ -835,9 +875,9 @@ class Store:
                 history.extend(self.evidence(task["id"], revision))
             task["evidence"] = history
             task["attempt_history"] = [dict(row) for row in self.db.execute("SELECT * FROM attempts WHERE task_id=? ORDER BY rowid", (task["id"],))]
+            task["owner_gate"] = self.owner_gate(task)
             task["steps"] = task_progress(task, tasks, config, progress_events, decisions, self.root)
             task["owner_inputs"] = self.owner_inputs(task["id"])
-            task["owner_gate"] = self.owner_gate(task)
             if task["stage"] == "analysis":
                 task["product_direction"] = self.sealed_document(task["id"], "product-direction.json") if any(Path(item["source"]).name == "product-direction.json" for item in self.current_evidence(task["id"])) else None
             if task["stage"] == "design":
@@ -846,6 +886,26 @@ class Store:
                 if baseline:
                     task["design_baseline"] = json_object(self.root / baseline["object_path"])
                     task["design_baseline"]["reference_evidence"] = next((item["id"] for item in current if item["source"] == task["design_baseline"].get("visual_reference")), None)
+                    task["design_baseline"]["approval"] = "approved" if task["status"] == "done" and any(
+                        row["task_id"] == task["id"] and row["revision"] == task["revision"] and row["action"] == "approve"
+                        for row in decisions) else "pending"
+                    for screen in task["design_baseline"].get("screens", []):
+                        for reference in screen["references"]:
+                            reference["evidence_id"] = next((item["id"] for item in current if item["source"] == reference["image"]), None)
+                        for asset in screen["assets"]:
+                            asset["evidence_id"] = next((item["id"] for item in current if item["source"] == asset["path"]), None)
+            if task["role"] in {"build", "verify"} and self.task("plan")["status"] == "done" and task["status"] != "superseded":
+                task["screen_targets"] = self.screen_targets(task["id"])
+                current = self.current_evidence(task["id"])
+                report = next((item for item in current if Path(item["source"]).name == "screen-comparisons.json"), None)
+                if report:
+                    task["screen_comparisons"] = json_object(self.root / report["object_path"])
+                    task["screen_comparisons"]["evidence_id"] = report["id"]
+                    if current_source is None:
+                        current_source = fingerprint(self.project)
+                    task["screen_comparisons"]["current_source"] = task["screen_comparisons"].get("source_fingerprint") == current_source
+                    for row in task["screen_comparisons"]["comparisons"]:
+                        row["evidence_id"] = next((item["id"] for item in current if item["source"] == row["rendered_image"]), None)
         events = [dict(row) for row in self.db.execute("SELECT * FROM events ORDER BY id DESC" + ("" if full_history else " LIMIT 250"))]
         for event in events:
             event["data"] = json.loads(event["data"])

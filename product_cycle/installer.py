@@ -12,7 +12,7 @@ def install_skills(project, preserve_existing=False):
     bundled = Path(__file__).parent / "skills"
     if not bundled.is_dir():
         bundled = Path(__file__).parent.parent / "skills"
-    sources = sorted(bundled.glob("product-cycle*"))
+    sources = sorted([*bundled.glob("product-cycle*"), bundled / "frontend-app-builder"])
     require(sources and all((source / "SKILL.md").is_file() for source in sources),
             "Bộ cài chưa có đủ skill. Cài lại Product Cycle từ gói đầy đủ.")
     destination = project / ".agents" / "skills"

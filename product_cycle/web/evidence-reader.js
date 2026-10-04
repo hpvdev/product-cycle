@@ -2,10 +2,11 @@
 function setView(next, scroll=true) {
   view=next;
   document.body.dataset.view=next;
-  const pages={overview:['Tổng quan phát triển','Theo dõi tiến độ, kế hoạch và bằng chứng của sản phẩm.'],plan:['Kế hoạch phát triển','Từng đầu việc, điều kiện hoàn tất và các phụ thuộc cần xử lý.'],workflow:['Quy trình và công việc','Từ giai đoạn lớn đến công việc và từng bước thực hiện.'],documents:['Tài liệu & bằng chứng','Đọc đặc tả, thiết kế và đầu ra thực tế ngay trong không gian làm việc.'],services:['Dịch vụ & nền tảng','Theo dõi chuẩn bị dự án và cấu hình đã xác định trong thiết kế.'],history:['Nhật ký phát triển','Các mốc thực hiện, kiểm chứng và quyết định trong quá trình phát triển.']};
+  const pages={overview:['Tổng quan phát triển','Theo dõi tiến độ, kế hoạch và bằng chứng của sản phẩm.'],plan:['Kế hoạch phát triển','Từng đầu việc, điều kiện hoàn tất và các phụ thuộc cần xử lý.'],workflow:['Quy trình và công việc','Từ giai đoạn lớn đến công việc và từng bước thực hiện.'],documents:['Tài liệu & bằng chứng','Đọc đặc tả, thiết kế và đầu ra thực tế ngay trong không gian làm việc.'],services:['Dịch vụ & nền tảng','Theo dõi chuẩn bị dự án và cấu hình đã xác định trong thiết kế.'],screens:['Màn hình & luồng','Xem trước thiết kế, đường chuyển và đối chiếu với giao diện thật.'],history:['Nhật ký phát triển','Các mốc thực hiện, kiểm chứng và quyết định trong quá trình phát triển.']};
   $('#view-title').textContent=pages[next][0];
   $('#view-description').textContent=pages[next][1];
   document.querySelectorAll('.nav-link').forEach(button=>{const active=button.dataset.view===next;button.classList.toggle('active',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current')});
+  requestAnimationFrame(()=>{if(next==='workflow'&&workflowDiagram&&!workflowDiagram.initialized)workflowDiagram.focus();if(next==='screens'&&screenDiagram&&!screenDiagram.initialized)screenDiagram.focus()});
   if(scroll)window.scrollTo({top:0,behavior:'smooth'});
 }
 

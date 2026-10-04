@@ -12,6 +12,7 @@ from product_cycle.fixtures import complete_fixture, prepare_plan
 from product_cycle.runner import execute, prompt_for, run_checks, run_cycle, run_phase, thread_title
 from product_cycle.store import Store, fingerprint, digest, runner_lock, write_json
 from product_cycle.bootstrap import prepare_project, repository_state, git
+from product_cycle.installer import install_skills
 from product_cycle.codex import ModelCapacityError
 from product_cycle.runner import sync_task, continue_task
 
@@ -317,6 +318,25 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(feedback["reason"], "Narrow the first version")
         self.assertIsNotNone(feedback["review"])
         self.assertTrue(feedback["previous_outputs"])
+
+    def test_frontend_skill_routes_only_to_design_and_approved_ui_work(self):
+        install_skills(self.store.project)
+        prepare_plan(self.store, self.plan())
+        _, directory = self.store.begin("T1", "work")
+        baseline = self.base / "approved-baseline.json"
+        inputs = [{"task": "design", "artifacts": [{"original_path": "design-baseline.json", "path": str(baseline)}]}]
+        skill = self.store.project / ".agents/skills/frontend-app-builder/SKILL.md"
+        for tid, has_ui, review, expected in [("design", False, False, True), ("T1", True, False, True),
+                                              ("T1", False, False, False), ("T1", True, True, False)]:
+            with self.subTest(tid=tid, has_ui=has_ui, review=review):
+                write_json(baseline, {"has_ui": has_ui})
+                with patch("product_cycle.runner.context", return_value={"accepted_inputs": inputs}):
+                    prompt_for(self.store, self.store.task(tid), directory, review=review)
+                packet = json.loads((directory / "context.json").read_text())
+                self.assertEqual("frontend_skill" in packet, expected)
+                if expected:
+                    self.assertEqual(packet["frontend_skill"]["path"], str(skill))
+                    self.assertTrue(skill.is_file())
 
     def test_runtime_plan_notifications_are_scoped_to_the_current_turn(self):
         config = self.store.config
@@ -730,7 +750,7 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(foundation["repository"]["branch"], "main")
             self.assertIsNone(foundation["repository"]["head"])
             self.assertEqual(git(store.project, "remote").stdout, "")
-            self.assertEqual(len(list((store.project / ".agents/skills").glob("*/SKILL.md"))), 12)
+            self.assertEqual(len(list((store.project / ".agents/skills").glob("*/SKILL.md"))), 13)
             for path in [".env", ".env.production", ".product-cycle/private.json"]:
                 self.assertEqual(git(store.project, "check-ignore", "--no-index", path).returncode, 0)
             self.assertEqual(git(store.project, "check-ignore", "--no-index", ".env.example").returncode, 1)
@@ -751,6 +771,9 @@ class WorkflowTests(unittest.TestCase):
         (project / "work.txt").write_text("Uncommitted user work")
         (project / "AGENTS.md").write_text("Existing instructions\n")
         (project / "PRODUCT_CYCLE_RULES.md").write_text("Custom common rules\n")
+        frontend = project / ".agents/skills/frontend-app-builder/SKILL.md"
+        frontend.parent.mkdir(parents=True)
+        frontend.write_text("Custom frontend guidance\n")
         first = prepare_project(project)
         original = (project / "AGENTS.md").read_text()
         second = prepare_project(project)
@@ -762,6 +785,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(original.startswith("Existing instructions\n"))
         self.assertEqual((project / "AGENTS.md").read_text(), original)
         self.assertEqual((project / "PRODUCT_CYCLE_RULES.md").read_text(), "Custom common rules\n")
+        self.assertEqual(frontend.read_text(), "Custom frontend guidance\n")
         self.assertFalse(second["changes"])
         self.assertFalse(second["skills"]["installed"])
 
