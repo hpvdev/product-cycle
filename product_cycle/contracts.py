@@ -49,8 +49,8 @@ WORK_STEPS = {
         ("Xác định màn hình và luồng thao tác", "Liệt kê màn hình, tab, trạng thái và đường chuyển theo yêu cầu đã chốt."),
         ("Khảo sát hướng thiết kế", "Dùng thiết kế hiện có hoặc tạo phương án bằng Product Design và Image Gen khi công cụ sẵn có."),
         ("Thiết kế bộ ảnh màn hình", "Dùng hướng đã chọn để tạo ảnh từng màn hình; lấy phản hồi trong Codex và lưu bản để bạn duyệt."),
-        ("Hoàn thiện trạng thái và tài nguyên", "Thiết kế trạng thái cần thiết, bố cục theo thiết bị và hình minh họa dùng trong sản phẩm."),
-        ("Chốt quy tắc và cách nghiệm thu", "Ghi màu, font, khoảng cách, bố cục thích ứng và tiêu chí so sánh."),
+        ("Đặc tả màn hình và tương tác", "Ghi bố cục, dữ liệu, từng thao tác, điều kiện sử dụng, xử lý, phản hồi, chuyển màn và các trạng thái cần thiết; liên kết ảnh thiết kế và tài nguyên."),
+        ("Chốt quy tắc chung và cách nghiệm thu", "Ghi quy tắc dùng chung, màu, font, khoảng cách và bố cục theo thiết bị; tách tiêu chí kiểm tra hành vi với đối chiếu ảnh thiết kế."),
     ],
     "architecture": [
         ("Đọc cấu trúc hiện có", "Xác định phần code và quy tắc liên quan; dùng lại thành phần phù hợp."),

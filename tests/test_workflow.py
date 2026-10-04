@@ -41,6 +41,18 @@ class WorkflowTests(unittest.TestCase):
         self.store.decide("analysis", "approve", "Owner", "Agreed scope")
         self.assertEqual(self.store.next_task()["id"], "design")
 
+    def test_dashboard_keeps_attempt_step_contract_after_workflow_update(self):
+        complete_fixture(self.store, "analysis")
+        _, directory = self.store.begin("design", "work")
+        prompt_for(self.store, self.store.task("design"), directory)
+        packet = json.loads((directory / "context.json").read_text())
+        packet["work_steps"][3].update(title="Historical state and asset design", description="Reviewed state and asset coverage, not per-action specifications.")
+        write_json(directory / "context.json", packet)
+        stage = next(stage for stage in self.store.snapshot()["stages"] if stage["id"] == "design")
+        step = next(step for step in stage["steps"] if step["id"] == "S4")
+        self.assertEqual(step["title"], "Historical state and asset design")
+        self.assertEqual(step["description"], packet["work_steps"][3]["description"])
+
     def test_blocked_increment_keeps_its_reason_outputs_and_history(self):
         prepare_plan(self.store, self.plan())
         reason = "Cần dữ liệu cho đầu việc này trước khi hoàn tất."

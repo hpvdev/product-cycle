@@ -7,6 +7,8 @@ description: Design scoped data contracts, component boundaries and technical de
 
 Reuse existing structures. Record consequential choices and unresolved risks. Verify uncertain technical assumptions with focused experiments when useful; do not add architecture or infrastructure without a concrete requirement.
 
+Use design.md's shared rules, screen/action IDs and behavior as the functional contract. In architecture.md, map the relevant actions to data/state ownership, component boundaries, validation, persistence and API/error contracts where needed. Separate common technical behavior from screen-specific behavior and reference the spec rather than duplicating it. Resolve contradictions with accepted requirements/design before dependent work; architecture must not silently redefine product behavior.
+
 When a Product Cycle context packet is supplied, its assigned task, accepted_inputs, work_steps, output schema and artifact_directory are authoritative. Use the specified step IDs in update_plan when available; report only observed progress. Return concrete artifact links and step results. In review mode return evidence-backed step judgments instead.
 
 When invoked on its own, perform only the requested stage in the selected project. Establish the relevant inputs and authorized scope; do not restart the entire cycle or implicitly begin the next stage. Keep repository and user instructions in effect.

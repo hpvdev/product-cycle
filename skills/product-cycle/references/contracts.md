@@ -5,7 +5,7 @@ Role guidance ships in `product_cycle/resources/roles/`. Load only the assigned 
 | Stage | Required output | Review focus |
 |---|---|---|
 | analysis | analysis.md, requirements.json | Outcome, facts/assumptions, scope, testable acceptance |
-| design | design.md, design-baseline.json and visual artifact for UI | Journeys, states, design rules, visual target, requirement coverage, accessibility |
+| design | design.md with shared and per-screen functional specs, design-baseline.json and visual artifact for UI | Business-rule consistency, action behavior, journeys/states, visual target, requirement coverage, accessibility |
 | architecture | architecture.md; services.json for new local cycles | Data, boundaries, decisions, verification and recovery |
 | plan | plan.json | Coverage, acyclic tasks, local checks, runtime capabilities |
 | setup | setup.md, readiness.json per assigned service | Scoped configuration, missing inputs, real connection checks |

@@ -21,6 +21,8 @@ Read [discovery guidance](references/discovery.md) when conducting product analy
 4. Chốt phạm vi: So sánh hướng trải nghiệm, giải thích đánh đổi và ghi quyết định còn cần chốt; giữ sức hấp dẫn cốt lõi.
 5. Viết yêu cầu và tiêu chí: Liên kết nhu cầu với hành trình, yêu cầu và cách đánh giá sản phẩm chạy thật.
 
+In analysis.md and requirements.json, establish business rules and observable interaction outcomes, including the screens and transitions implied by the core journey. Leave visual layout and the full per-control screen specification to design. Explicitly carry unresolved consequential behavior into that discussion rather than allowing coding to choose it silently.
+
 Ask the next question that can change the product decision, in small conversational rounds. Follow up on answers instead of advancing through a fixed questionnaire. Reuse explicit choices; do not ask the owner to authorize them again. A new product needs clarity about user, outcome, core experience and quality expectations, not merely platform/content preferences. A bounded improvement with accepted discovery needs only the relevant gaps.
 
 When the owner gives a broad audience or says they do not know, help them make progress with a concrete use scenario and explain the choices it exposes. Do not immediately turn platform/mode answers into the final scope. Resolve the most consequential missing intent through a follow-up or a concrete proposal the owner can assess; do not treat recording “unknown” as doing that discovery. For a creative or educational product, explain what makes the core experience worth using and what progress is intended, rather than only listing mechanics. Do not require novelty or new features when the owner deliberately wants a familiar product.

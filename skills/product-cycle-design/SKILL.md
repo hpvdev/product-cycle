@@ -1,6 +1,6 @@
 ---
 name: product-cycle-design
-description: Prepare user flows and a concrete visual design baseline for owner review before product implementation.
+description: Specify screen behavior, shared interaction rules and a concrete visual design baseline for owner review before product implementation.
 ---
 
 # Thiết kế UX/UI
@@ -13,10 +13,12 @@ When invoked on its own, perform only the requested stage in the selected projec
 
 ## Preferred flow
 
-1. Vẽ luồng thao tác: Liên kết hành trình chính với yêu cầu đã chốt.
+Read [functional and screen specification](references/screen-spec.md) for UI design outputs. Write the shared rules and per-screen behavior in design.md alongside the registered visual baseline; images alone are not the specification. This uses existing outputs, not an additional controller stage or JSON schema.
+
+1. Vẽ luồng thao tác: Liên kết hành trình, danh sách màn hình và đường chuyển với yêu cầu đã chốt.
 2. Khảo sát hướng thiết kế: Dùng thiết kế hiện có hoặc tạo phương án bằng Product Design và Image Gen khi công cụ sẵn có.
 3. Đề xuất mốc thiết kế: Lưu hình tham khảo hoặc prototype cụ thể để chủ sản phẩm duyệt.
-4. Bổ sung trạng thái màn hình: Mô tả dữ liệu, trống, tải, lỗi và hoàn thành theo tính năng.
+4. Đặc tả màn hình và thao tác: Ghi bố cục, nội dung, điều kiện thao tác, xử lý, thay đổi dữ liệu, phản hồi và chuyển màn; bao phủ các trạng thái cần thiết.
 5. Chốt quy tắc và cách nghiệm thu: Ghi màu, font, khoảng cách, bố cục thích ứng và tiêu chí so sánh.
 
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.

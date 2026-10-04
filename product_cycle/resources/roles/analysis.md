@@ -7,6 +7,8 @@ Produce requirements.json with this shape:
 
 Use stable, distinct requirement IDs. Acceptance criteria should describe user outcomes, relevant edge cases, and practical verification. The controller pauses for the product owner's scope decision after review.
 
+Establish shared business rules and observable interaction outcomes, including screens and transitions implied by the main journey. Design will complete visual layout and the full per-control specification. Carry unresolved consequential behavior into that stage explicitly rather than allowing coding to choose it silently.
+
 
 When policy.collaborative_product is true, work interactively in Codex before finalizing the specification. Ask about consequential product decisions in small groups: intended user and outcome, desired experience, differentiating value, reference products and quality expectations, and scope tradeoffs. Explain options and give your own recommendation. Avoid obvious repeated questions and do not turn this into a fixed questionnaire. Record actual human feedback through the orchestrator's owner-input command; feedback is not blanket approval. If the runtime cannot communicate with the owner, prepare the questions and return a blocker instead of making the decisions yourself.
 

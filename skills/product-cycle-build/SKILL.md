@@ -22,6 +22,8 @@ For controller-backed work, read [stage contracts](../product-cycle/references/c
 
 Read the contract sections and accepted input sections relevant to this increment; use artifact paths to locate specific requirements rather than loading every document, log and earlier stage in full.
 
+For UI work, read the assigned screen/action specification and shared rules in accepted design.md, the matching accepted visual reference, and the relevant architecture contract. Implement control availability, validation, processing, data/state changes, feedback, navigation and applicable recovery as specified. Do not infer business logic from an image or substitute a visually similar inert control. If a consequential behavior is missing or contradictory, report the exact decision and affected scope; do not block unrelated work or autonomously redesign the product. Verify behavior separately from image-to-render fidelity.
+
 On a retry, inspect existing source, tests and recorded feedback first. Preserve usable work and finish the missing behavior or result; do not restart design, regenerate assets or rewrite accepted foundations merely because a previous turn was interrupted.
 
 Register the actual changed source and tests with concise requirement, criterion and step mappings. Add supporting reports only when the assigned contract needs them. Return the structured result once the increment is ready for controller checks; do not prolong the turn with redundant documentation or repeated inspection of unchanged files. Token limits belong to the configured controller policy; do not invent a separate token budget in the skill.

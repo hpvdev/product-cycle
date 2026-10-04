@@ -1,6 +1,7 @@
 """Project recorded attempts and evidence onto the dashboard's small steps."""
 
 import json
+from pathlib import Path
 
 from .contracts import STAGES, STAGE_TITLES, work_steps
 
@@ -16,8 +17,25 @@ def task_progress(task, tasks, config, events, decisions, root):
     base = "stale" if task["status"] == "stale" else "waiting" if waiting else "pending"
     result_steps = {step["id"]: step for step in (task.get("result") or {}).get("steps", [])}
     review_steps = {step["id"]: step for step in (task.get("review") or {}).get("steps", [])}
+    work = next((attempt for attempt in reversed(attempts) if attempt["phase"] == "work"), None)
+    definitions = work_steps(task["role"], config.get("screen_design_required", False))
+    if work:
+        recorded_valid = False
+        try:
+            recorded = json.loads((Path(work["directory"]) / "context.json").read_text()).get("work_steps")
+            if (isinstance(recorded, list) and len(recorded) == len(definitions) and
+                    all(isinstance(step, dict) and all(isinstance(step.get(key), str) for key in ("id", "title", "description")) for step in recorded) and
+                    {step["id"] for step in recorded} == {step["id"] for step in definitions}):
+                definitions = recorded
+                recorded_valid = True
+        except (OSError, ValueError, AttributeError, KeyError):
+            pass
+        # Older screen-image attempts without a context packet did not specify each action.
+        if task["role"] == "design" and config.get("screen_design_required", False) and not recorded_valid:
+            definitions[3] = dict(id="S4", title="Hoàn thiện trạng thái và tài nguyên", description="Thiết kế trạng thái cần thiết, bố cục theo thiết bị và hình minh họa dùng trong sản phẩm.")
+            definitions[4] = dict(id="S5", title="Chốt quy tắc và cách nghiệm thu", description="Ghi màu, font, khoảng cách, bố cục thích ứng và tiêu chí so sánh.")
     steps = []
-    for definition in work_steps(task["role"], config.get("screen_design_required", False)):
+    for definition in definitions:
         step = dict(definition, status=base, source="controller", note="", evidence=[], updated_at=None)
         for event in events:
             if event["type"] == "step.progress" and event["data"].get("step") == step["id"]:
@@ -41,7 +59,6 @@ def task_progress(task, tasks, config, events, decisions, root):
         steps.append({"id": sid, "title": title, "description": description, "status": status,
                       "source": source, "note": note, "evidence": refs or [], "updated_at": None})
 
-    work = next((attempt for attempt in reversed(attempts) if attempt["phase"] == "work"), None)
     artifact_refs = [item["id"] for item in evidence if item["kind"] == "artifact"]
     add("outputs", "Kiểm tra đầu ra", "Đối chiếu cấu trúc, file bắt buộc và liên kết bằng chứng.",
         "done" if task.get("result") else "blocked" if work and work["status"] == "failed" else base,
