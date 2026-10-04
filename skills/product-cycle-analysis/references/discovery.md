@@ -12,6 +12,10 @@ When the owner is commissioning for other people, distinguish their vision from 
 
 Ask one focused question or a small related group at a time. Explain why a difficult choice matters. Offer choices when helpful, with room for a different answer; avoid leading defaults that silently set scope. Do not repeat answered questions or impose a question quota. End a round by reflecting the understanding and inviting correction.
 
+If an answer is “everyone” or “not sure”, propose a representative situation to anchor the discussion without claiming it is researched or narrowing the audience unasked. For example, ask which outcome matters most in that situation: recognizing a new word, recalling its meaning/spelling, or practicing typing. Reuse an already chosen pair of modes; the remaining question may be their purpose or priority, not whether to select them again. When the owner has no past episode to share, explore their intended experience or a reference and its appeal instead of fabricating a customer story.
+
+Before final scope review, the owner should be able to assess a concrete intended use, the proposed progress/value, and why the core experience is worth using. If these remain unspecified, present the useful alternatives or targeted question first. A proposal may still await owner selection; distinguish that from having no substantive answer. Later empirical validation can be deferred, but a generic hypothetical persona and a disclaimer alone do not establish shared product understanding.
+
 ## Connect outcomes, needs and solutions
 
 Use an opportunity-to-solution outline when there are several plausible directions: desired outcome → unmet need or desired experience → possible solution → assumption to test. A short list is sufficient. Without customer evidence this is a hypothesis map, not a validated opportunity tree.
@@ -19,6 +23,8 @@ Use an opportunity-to-solution outline when there are several plausible directio
 Describe a concrete end-to-end use episode: entry context, core action, feedback, result and reason to return when relevant. This exposes gaps that a list of buttons hides. Preserve the owner's chosen core mechanic; alternatives may vary how it delivers value, without replacing it unasked.
 
 Compare materially different approaches when uncertainty warrants it. Explain which need each serves, experiential value, tradeoffs and what could make it fail. Recommend one with reasons. One direction is enough when the owner already selected it; do not invent alternatives or claim uniqueness without evidence.
+
+For a game, describe the moment-to-moment loop in experiential terms: action, understandable feedback, reason to continue or return, and how it serves the chosen outcome. A mode toggle or visual theme alone does not explain appeal. Where the owner wants more depth, explore variations within their selected core mechanic and discuss the tradeoffs before adding features. Neither a longer feature list nor declaring the interaction “fun” answers that question.
 
 For a vocabulary game, distinguish copying visible spelling from recalling meaning or spelling without a cue. Describe the intended learning outcome and how the mechanic supports it. Treat educational benefit and replay appeal as hypotheses to evaluate, not facts inferred from feature completeness. This example is not a mandatory game template.
 
@@ -29,6 +35,8 @@ Separate four kinds of support in analysis.md: owner-confirmed intent, reported 
 Challenge arbitrary defaults such as item counts, scoring, time limits or feature exclusions. Explain what they serve; label illustrative values as adjustable proposals. Ask the owner about consequential tradeoffs, not every implementation detail. Do not turn “version one” into permission to remove the product's core appeal.
 
 Distinguish functional acceptance from experience and outcome evaluation. A working animation proves behavior, not enjoyment; a screenshot proves appearance, not learning or retention. Quality targets should identify an observable evaluation, its requirement and any owner judgment still needed. Explain the basis for numeric thresholds, or mark them provisional for the core-experience trial.
+
+Keep proposed user-facing labels consistent with those limits. A correct response in one round supports “answered without a hint”, not “learned” or “remembered permanently”. A disclaimer elsewhere does not correct a misleading label in the journey. Review the narrative, requirements and direction together for such contradictions.
 
 ## Fit the existing artifacts
 

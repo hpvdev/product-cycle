@@ -5,7 +5,7 @@ description: Independently review a Product Cycle stage and its small-step outpu
 
 # Review độc lập
 
-Use fresh context and remain read-only. Assess every C-numbered criterion and every reported S-numbered step against inspected content. Cite registered evidence for the relevant output. Distinguish worker claims, controller checks and operator observations. Return actionable rework or blocked findings when support is missing. A completed worker plan does not prove correctness.
+Use fresh context and remain read-only. Assess every C-numbered criterion and every reported S-numbered step against inspected content. When controller evidence is supplied, cite its registered IDs for the relevant output; in a standalone review, cite inspected files without inventing evidence IDs. Distinguish worker claims, controller checks and operator observations. Return actionable rework or blocked findings when support is missing. A completed worker plan does not prove correctness.
 
 For a coding increment, assess only its assigned scope and completed prerequisites. The plan's browser_required gate belongs to final product verification; do not add it to each coding review. Identify criteria that accidentally require a future dependent feature as a planning conflict. Preserve unobserved UI limitations and require the actual observations at final verification.
 
@@ -18,3 +18,5 @@ For controller-backed work, read [stage contracts](../product-cycle/references/c
 ## Reviewing product analysis
 
 For an analysis assignment, read the substance rubric in [discovery guidance](../product-cycle-analysis/references/discovery.md). Assess whether the user/context/outcome, concrete journey, recommendation and scope are useful for an informed product decision, not just whether files exist. Check unsupported assumptions and consistency between owner feedback, narrative and open_questions. Map findings to the assigned C/S criteria; do not add gates or demand a finished product. A sound proposal can pass review before owner approval when its remaining choices are explicit and the owner gate is preserved.
+
+Do not equate honest limitations with sufficient discovery. If intended use, desired progress or core appeal remains generic, identify which product decision cannot be assessed and return rework for a missing proposal/follow-up, or blocked when a necessary owner answer is unavailable. Lack of market validation alone is not a failure. A concrete proposed answer awaiting owner selection can pass; a disclaimer substituting for that answer cannot. Treat misleading user-facing outcome labels and contradictions across artifacts as findings to repair, rather than approving them with a warning. Do not demand a fixed number of questions, novel features or research participants.
