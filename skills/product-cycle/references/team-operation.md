@@ -2,6 +2,10 @@
 
 Use this mode only when the human selects an autonomous team. Existing Desktop and sequential App Server projects retain their own execution mode. The illustrated office is an observation surface, not permission to run agents or invent dialogue.
 
+## Office-first onboarding
+
+Use [product-cycle-onboard](../../product-cycle-onboard/SKILL.md) for a new company. `product-cycle onboard --project /absolute/project --name "Office name" --open` opens a prepared office awaiting the owner's request, without starting workers. After the owner provides a real brief in Codex, `onboard --project ... --brief /absolute/request.md --start` starts the company. `onboard --project ...` reports verified dashboard links, recorded sessions and what happens next; it preserves an existing cycle's policy and history.
+
 ## Installation and execution
 
 From the installed Product-Cycle executable or repository:

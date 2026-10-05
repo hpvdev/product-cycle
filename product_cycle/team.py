@@ -723,7 +723,7 @@ def run_mission(project, rid, client_factory, cancel):
             team.update(rid, observed_model=params.get("toModel"))
         elif method == "turn/completed":
             terminal_observed = params.get("turn", {}).get("status") in {"completed", "failed", "interrupted"}
-        if method in {"client/threadReady", "client/turnReady", "client/capabilities", "turn/completed", "item/tool/call", "warning", "error"} or method.startswith(("item/", "thread/tokenUsage/")) and time.monotonic() - last_activity >= 3:
+        if method in {"client/threadReady", "client/turnReady", "client/capabilities", "turn/completed", "item/tool/call", "warning", "error"} or method.startswith(("item/", "thread/tokenUsage/")) and time.monotonic() - last_activity >= .5:
             team.update(rid, last_activity_at=now())
             team.event("runtime.activity", team.run(rid), method=method, item_type=params.get("item", {}).get("type"))
             last_activity = time.monotonic()

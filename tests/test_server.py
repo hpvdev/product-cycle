@@ -73,6 +73,40 @@ class DashboardTests(unittest.TestCase):
         with urlopen(self.url + "/assets/office/coordinator.png", timeout=5) as response:
             self.assertEqual(response.headers.get_content_type(), "image/png")
 
+    def test_live_stream_delivers_changes_and_reconnects_with_full_state(self):
+        def frame(response):
+            event, data = None, None
+            while True:
+                line = response.readline().decode().rstrip('\r\n')
+                if line.startswith('event: '):
+                    event = line[7:]
+                elif line.startswith('data: '):
+                    data = json.loads(line[6:])
+                elif not line and event:
+                    if event == 'state':
+                        return data
+                    event, data = None, None
+        with urlopen(self.url + '/api/live', timeout=6) as response:
+            self.assertEqual(response.headers.get_content_type(), 'text/event-stream')
+            self.assertEqual(frame(response)['project'], str((self.base / 'project').resolve()))
+            with patch.dict(os.environ, self.env):
+                store = Store(self.base / 'project')
+                store.owner_input('analysis', 'Synthetic owner', 'Live-stream test: preserve this exact observation')
+                store.close()
+            for _ in range(10):
+                current = frame(response)
+                analysis = next(task for task in current['tasks'] if task['id'] == 'analysis')
+                if any(note['note'] == 'Live-stream test: preserve this exact observation' for note in analysis['owner_inputs']):
+                    break
+            else:
+                self.fail('Committed input did not reach the live connection')
+        request = Request(self.url + '/api/live', headers={'Last-Event-ID': '999999999'})
+        with urlopen(request, timeout=6) as response:
+            reconnected = frame(response)
+            self.assertIn('team', reconnected)
+            self.assertIn('tasks', reconnected)
+            self.assertEqual(reconnected['project'], str((self.base / 'project').resolve()))
+
     def test_post_requires_control_token(self):
         request = Request(self.url + "/api/pause", data=b"{}", headers={"Content-Type": "application/json"})
         with self.assertRaises(HTTPError) as caught:

@@ -34,11 +34,13 @@ def _text(value, message):
 
 def _read(store, question_id):
     row = store.db.execute("""SELECT q.*, t.revision AS current_revision,
-        t.title AS task_title, t.stage AS stage FROM company_questions q
-        JOIN tasks t ON t.id=q.task_id WHERE q.id=?""", (question_id,)).fetchone()
+        t.title AS task_title, t.stage AS stage,r.thread_id AS source_thread_id
+        FROM company_questions q JOIN tasks t ON t.id=q.task_id
+        JOIN team_runs r ON r.id=q.source_run_id WHERE q.id=?""", (question_id,)).fetchone()
     require(row is not None, "Không tìm thấy câu hỏi cần phản hồi.")
     value = dict(row)
     value["options"] = json.loads(value["options"])
+    value["owner_thread_id"] = store.config.get("owner_chat", {}).get("thread_id")
     value["is_current"] = value["revision"] == value["current_revision"]
     value["recorded_status"] = value["status"]
     if not value["is_current"]:

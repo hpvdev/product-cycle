@@ -42,6 +42,25 @@ python3 -m product_cycle run --project /absolute/product
 
 `run` ở chế độ Codex App chuẩn bị công việc, không tự gọi model. Chat Codex đang hoạt động dùng skill product-cycle để nhận công việc, trao đổi với bạn và gửi kết quả về controller. Xem [vòng thực thi native](skills/product-cycle/references/operating-guide.md#native-codex-loop). Chọn `init --executor codex-app-server` nếu muốn chạy bằng App Server riêng.
 
+## Mở công ty trước, rồi giao yêu cầu
+
+Trong chat Codex, dùng skill `product-cycle-onboard` và chọn thư mục dự án. Chưa cần mô tả sản phẩm đầy đủ:
+
+```sh
+product-cycle onboard --project /absolute/new-project --name "Công ty của tôi" --open
+```
+
+Lệnh chuẩn bị Git, rules và skills rồi mở dashboard trên cổng trống, trả đúng link dự án. Nhân viên hiện “Chờ nhận yêu cầu”; chưa có worker chạy. Bạn xem văn phòng trước, sau đó mô tả sản phẩm trong chat Codex. AI lưu mô tả thật, rồi thực hiện:
+
+```sh
+product-cycle onboard --project /absolute/new-project --brief /absolute/request.md --start
+product-cycle onboard --project /absolute/new-project
+```
+
+Bộ điều phối mới bắt đầu giao việc. Bạn cùng BA chốt phân tích; brief ban đầu không thay cho đặc tả hoặc quyết định duyệt. Project có sẵn giữ nguyên chính sách và lịch sử. Một process vừa khởi động chưa chứng minh đội ngũ đang chạy; bản ghi phiên và trạng thái kết nối xác nhận hoạt động.
+
+Dashboard nhận cập nhật trực tiếp qua kết nối sự kiện, tự kết nối lại với trạng thái đầy đủ và báo khi dữ liệu có thể đã cũ. Trạng thái công ty, danh sách nhân viên/chức danh, công việc và hoạt động đã ghi nhận hiện rõ mà không phụ thuộc zoom. Chỉ tạo link phiên khi có danh tính thật; phiên App Server chưa được xác nhận xuất hiện trong danh sách chat Codex App. Chưa có công cụ hoặc dữ liệu thật thì không giả lập hoạt động.
+
 ## Đội ngũ tự động và văn phòng
 
 Chọn chế độ đội ngũ khi tạo dự án để bộ điều phối chạy nền qua Codex App Server:

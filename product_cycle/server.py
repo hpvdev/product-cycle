@@ -47,6 +47,8 @@ def serve(project, port=8787):
     token = secrets.token_urlsafe(32)
     project = str(Path(project).resolve())
     stopped = threading.Event()
+    from .realtime import StateFeed
+    feed = StateFeed(project, token, stopped)
 
     def sync_chats():
         from .runner import sync_task, continue_task, run_cycle
@@ -110,10 +112,41 @@ def serve(project, port=8787):
         def valid_host(self):
             return self.headers.get("Host") in {"127.0.0.1:" + str(self.server.server_port), "localhost:" + str(self.server.server_port)}
 
+        def stream_state(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+            feed.subscribe()
+            version = 0  # Every connection gets a full current snapshot; no partial replay gap.
+            self.connection.settimeout(10)
+            try:
+                self.wfile.write(b"retry: 1500\n\n")
+                self.wfile.flush()
+                while not stopped.is_set():
+                    current, event, payload = feed.read(version)
+                    if current != version and payload is not None:
+                        frame = "id: " + str(current) + "\nevent: " + event + "\ndata: " + payload + "\n\n"
+                        version = current
+                    elif event == "unavailable" and payload is not None:
+                        frame = "event: unavailable\ndata: " + payload + "\n\n"
+                    else:
+                        frame = "event: heartbeat\ndata: {}\n\n"
+                    self.wfile.write(frame.encode())
+                    self.wfile.flush()
+            except (OSError, TimeoutError):
+                pass  # Disconnected clients reconnect with a fresh snapshot.
+            finally:
+                feed.unsubscribe()
+
         def do_GET(self):
             if not self.valid_host():
                 return self.reply(403, {"error": "Không thể truy cập bảng điều khiển từ địa chỉ này."})
             route = urlparse(self.path).path
+            if route == "/api/live":
+                return self.stream_state()
             if route == "/":
                 return self.reply(200, (Path(__file__).parent / "web" / "dashboard.html").read_bytes(), "text/html; charset=utf-8")
             if route == "/dashboard.css":
@@ -146,6 +179,15 @@ def serve(project, port=8787):
                         after, limit = int(query.get("after", ["0"])[0]), int(query.get("limit", ["100"])[0])
                     except ValueError:
                         raise WorkflowError("Mốc đọc lịch sử chưa hợp lệ.")
+                    if route.endswith("messages") and "ids" in query:
+                        try:
+                            ids = [int(value) for value in query["ids"][0].split(",")]
+                        except ValueError:
+                            raise WorkflowError("Chọn các thông điệp đã được ghi nhận.")
+                        require(0 < len(ids) <= 100 and all(mid > 0 for mid in ids), "Chọn các thông điệp đã được ghi nhận.")
+                        marks = ",".join("?" for _ in ids)
+                        rows = [dict(row) for row in store.db.execute("SELECT * FROM team_messages WHERE id IN (" + marks + ") ORDER BY id", ids)]
+                        return self.reply(200, {"items": rows})
                     if route.endswith("discussions"):
                         from .team_discussions import page, by_ids
                         TeamStore(store)

@@ -47,8 +47,10 @@ def _read(store, did):
         post = dict(post)
         post['mentions'], post['evidence'] = json.loads(post['mentions']), json.loads(post['evidence'])
         result['posts'].append(post)
-    result['requests'] = [dict(r) for r in store.db.execute("""SELECT q.id,q.agent_id,q.status,q.run_id,l.purpose
+    result['requests'] = [dict(r) for r in store.db.execute("""SELECT q.id,q.agent_id,q.status,q.run_id,l.purpose,origin.agent_id AS sender_agent_id,
+        actual.agent_id AS actual_agent_id,actual.status AS run_status
         FROM team_discussion_requests l JOIN team_requests q ON q.id=l.request_id
+        JOIN team_runs origin ON origin.id=q.sender_run_id LEFT JOIN team_runs actual ON actual.id=q.run_id
         WHERE l.discussion_id=? ORDER BY q.rowid""", (did,))]
     return result
 

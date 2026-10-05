@@ -13,7 +13,7 @@
 <div class="office-header"><div class="office-heading"><div class="office-title"><h1>Open Studio</h1><span id="office-demo" hidden>Minh họa</span></div><div class="office-breadcrumb"><span>Văn phòng</span><span class="breadcrumb-divider">/</span><strong id="office-project">Đang kết nối…</strong><span class="office-active" id="office-active">Chưa nhận trạng thái</span></div></div><div class="office-header-actions"><button id="office-roster-toggle" class="office-icon-button" aria-label="Xem danh sách đội ngũ" aria-expanded="false"><img src="/assets/icons/users.svg" alt=""></button><span class="office-header-divider"></span><button id="office-inspector-toggle"><img src="/assets/icons/eye-off.svg" alt=""><span>Ẩn chi tiết</span></button><button id="office-fullscreen" class="office-icon-button" aria-label="Toàn màn hình"><img src="/assets/icons/maximize.svg" alt=""></button></div></div>
 <div class="office-stage" id="office-stage"><div class="office-viewport" id="office-viewport" tabindex="0" aria-label="Văn phòng có thể di chuyển và thu phóng. Dùng phím mũi tên để di chuyển; dấu cộng, trừ để thu phóng; phím 0 để vừa khung."><div class="office-world" id="office-world"><img class="office-environment" src="/assets/office/company-wide-base.png" alt="Không gian làm việc rộng rãi của đội ngũ"><div id="office-department-art" aria-hidden="true"></div><div id="office-workstations"></div><nav id="office-departments" aria-label="Chọn bộ phận"></nav></div><canvas id="office-connectors" aria-hidden="true"></canvas><canvas id="office-label-lines" aria-hidden="true"></canvas><div id="office-labels"></div></div>
 <div class="office-connection" id="office-connection" role="status"><span class="connection-dot"></span><span>Đang kết nối bộ điều phối…</span></div>
-<p id="office-overview-hint" class="office-overview-hint" hidden>Phóng to để xem từng thành viên, hoặc mở danh sách đội ngũ.</p>
+<p id="office-overview-hint" class="office-overview-hint" hidden>Danh sách đội ngũ luôn hiển thị tên, trạng thái và công việc; chọn nhân viên để xem chi tiết.</p>
 <details id="office-specialists" class="office-specialists" hidden><summary><img src="/assets/icons/users.svg" alt="">Chuyên gia và reviewer <span id="office-specialist-count">0</span></summary><p>Chọn một thành viên để xem nhiệm vụ và trao đổi.</p><div id="office-specialist-items"></div></details>
 <aside class="office-roster" id="office-roster" hidden aria-label="Danh sách đội ngũ"><div class="office-panel-title"><h2>Đội ngũ</h2><button id="office-roster-close" class="office-icon-button" aria-label="Đóng danh sách"><img src="/assets/icons/x.svg" alt=""></button></div><p>Chọn một thành viên để xem công việc và trao đổi.</p><label class="office-department-label" for="office-department-filter">Bộ phận<select id="office-department-filter"><option value="all">Tất cả bộ phận</option></select></label><div id="office-roster-items"></div></aside>
 <aside class="office-inspector" id="office-inspector" aria-label="Chi tiết thành viên"><div id="office-inspector-content"><p class="office-empty">Đang nhận thông tin đội ngũ…</p></div></aside>
@@ -39,13 +39,13 @@ const $=s=>document.querySelector(s);
 const executionPanel=document.createElement('section');executionPanel.id='execution';executionPanel.className='execution';executionPanel.setAttribute('aria-label','Phiên thực thi');executionPanel.setAttribute('aria-live','off');$('header .control-menu').before(executionPanel);
 const localTime=value=>value?new Date(value).toLocaleString('vi-VN'):'Chưa ghi nhận';
 const specPanel=document.createElement('section');specPanel.className='panel overview documents-section';specPanel.setAttribute('aria-label','Đặc tả sản phẩm');$('#document-library').closest('.documents-section').after(specPanel);
-async function loadSpec(){
+async function loadSpec(version){
  const analysis=state.tasks.find(t=>t.id==='analysis');
  const record=evidenceRecords().find(e=>e.task_id===analysis?.id&&e.current&&e.kind==='artifact'&&e.source.endsWith('/requirements.json'));
  if(!record){spec=null;specHash=null;return}
  if(specHash===record.sha256)return;
  spec=null;specHash=null;
- try{const response=await fetch('/evidence/'+encodeURIComponent(record.id));if(response.ok){spec=JSON.parse(await response.text());specHash=record.sha256}}catch{}
+ try{const response=await fetch('/evidence/'+encodeURIComponent(record.id));if(response.ok){const data=JSON.parse(await response.text());if(version===stateVersion){spec=data;specHash=record.sha256}}}catch{}
 }
 function renderSpec(){
  const analysis=state.tasks.find(t=>t.id==='analysis'),design=state.tasks.find(t=>t.id==='design'),baseline=design?.design_baseline;
@@ -66,6 +66,7 @@ function decisionSummary(){
 }
 
 function renderExecution(){
+ if(state.config.awaiting_request){executionPanel.innerHTML='<h2>Chờ bạn giao yêu cầu</h2><p>Văn phòng đã chuẩn bị. Mô tả sản phẩm trong chat Codex để đội phân tích bắt đầu.</p>';return}
  const run=state.execution,gate=state.state!=='paused'&&run.status==='idle'?state.tasks.find(task=>task.status==='awaiting_approval'):null,a=gate?gate.attempt_history.filter(item=>item.phase==='work'&&item.revision===gate.revision).at(-1):run.attempt,report=run.continuation,waiting=run.waiting_for_verification;
  const activity=(run.activity?run.activity+' · ':'')+'Hoạt động gần nhất: '+localTime(run.last_activity_at)+(run.active&&run.seconds_since_activity>60?' · Chưa nhận cập nhật mới trong hơn một phút':'');
  const executionKey=JSON.stringify([run.status,run.phase,run.task_title,run.reason,a?.thread_id,state.state,waiting,report?.evidence_id,gate?.id,gate?.revision]);if(executionKey===lastExecutionKey&&$('#execution-time')){$('#execution-time').textContent=activity;return}lastExecutionKey=executionKey;
@@ -98,7 +99,16 @@ function renderDevelopment(){
  document.querySelectorAll('[data-service-task]').forEach(b=>b.onclick=()=>chooseTask(b.dataset.serviceTask));
 }
 function error(message){$('#error').textContent=message;$('#error').style.display=message?'block':'none'}
-async function load(){try{const response=await fetch('/api/state');if(!response.ok)throw Error();state=await response.json();await loadSpec();render();error('');if(!deepLinkOpened){deepLinkOpened=true;const id=new URLSearchParams(location.search).get('evidence');if(id)openEvidence(id)}}catch{executionPanel.textContent='Chưa nhận được trạng thái mới. Hiện không thể xác nhận phiên có đang chạy hay không.';officeConnectionFailed();error('Chưa kết nối được với bảng điều khiển. Kiểm tra dịch vụ rồi thử làm mới.')}}
+let stateVersion=0,liveStream=null,liveConnected=false,liveEpoch=0,lastLiveReceived=0;
+const liveStatus=document.createElement('p');liveStatus.id='live-status';liveStatus.className='live-status';liveStatus.setAttribute('role','status');liveStatus.textContent='Đang kết nối cập nhật trực tiếp…';$('.office-header-actions').prepend(liveStatus);
+function liveUnavailable(){liveEpoch++;stateVersion++;liveConnected=false;liveStatus.dataset.status='offline';liveStatus.textContent='Đang kết nối lại · Dữ liệu có thể đã cũ';officeConnectionFailed()}
+function liveHeartbeat(){lastLiveReceived=Date.now();if(!liveConnected)return;liveStatus.dataset.status='connected';liveStatus.textContent='Cập nhật trực tiếp';liveStatus.title='Đã nhận cập nhật lúc '+new Date().toLocaleTimeString('vi-VN');if(state){officeConnected=true;officeLatestStateAt=Date.now();refreshOfficeActivity(true)}}
+async function acceptState(data){const version=++stateVersion;state=data;await loadSpec(version);if(version!==stateVersion)return;render();error('');if(!deepLinkOpened){deepLinkOpened=true;const id=new URLSearchParams(location.search).get('evidence');if(id)openEvidence(id)}}
+async function load(){const version=stateVersion;try{const response=await fetch('/api/state');if(!response.ok)throw Error();const data=await response.json();if(version!==stateVersion)return;await acceptState(data)}catch{if(version!==stateVersion)return;liveUnavailable();error('Chưa kết nối được với bảng điều khiển. Dữ liệu đã nhận được giữ lại; bạn có thể thử làm mới.')}}
+function startLive(){if(!window.EventSource){liveStatus.textContent='Chưa có cập nhật trực tiếp · Dùng Làm mới để xem trạng thái';load();return}liveStream=new EventSource('/api/live');liveStream.addEventListener('state',async event=>{const epoch=liveEpoch;try{await acceptState(JSON.parse(event.data));if(epoch===liveEpoch){liveConnected=true;liveHeartbeat()}}catch{liveUnavailable()}});liveStream.addEventListener('heartbeat',()=>liveHeartbeat());liveStream.addEventListener('unavailable',()=>liveUnavailable());liveStream.onerror=()=>liveUnavailable()}
+setInterval(()=>{if(liveConnected&&Date.now()-lastLiveReceived>12000)liveUnavailable()},3000);
+window.addEventListener('pagehide',()=>liveStream?.close());
+window.addEventListener('pageshow',event=>{if(event.persisted){liveStream?.close();startLive()}});
 async function control(path,data={}){const response=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Product-Cycle-Token':state.control_token},body:JSON.stringify(data)});const result=await response.json();if(!response.ok)throw Error(result.error);await load()}
 function stepRow(t,s,i){return '<button class="step '+escape(s.status)+(t&&t.id===selected&&s.id===selectedStep?' selected':'')+'" '+(t?'data-task="'+escape(t.id)+'" data-step="'+escape(s.id)+'"':'disabled')+'><span class="step-number">'+String(i+1).padStart(2,'0')+'</span><span class="step-copy"><strong>'+escape(s.title)+'</strong><p>'+escape(s.description)+'</p></span>'+badge(s.status)+'</button>'}
 function workItem(t){
@@ -171,7 +181,7 @@ $('#previous-evidence').onclick=()=>moveEvidence(-1);$('#next-evidence').onclick
 $('#close-evidence').onclick=()=>$('#evidence-viewer').close();
 $('#evidence-viewer').addEventListener('close',()=>{viewerRequest++;openedEvidence=null;const url=new URL(location.href);url.searchParams.delete('evidence');history.replaceState(null,'',url)});
 document.addEventListener('click',event=>{const link=event.target.closest('[data-evidence]');if(link){event.preventDefault();openEvidence(link.dataset.evidence)}});
-load();setInterval(()=>{if(!$('#decision').open)load()},2000);
+startLive();
 </script>
 </body>
 </html>

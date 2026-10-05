@@ -87,20 +87,21 @@ class Store:
 
     @classmethod
     def create(cls, project, brief, name, model=None, effort=None, mode="live", team=False,
-               team_concurrency=0, team_game_designer=False):
+               team_concurrency=0, team_game_designer=False, awaiting_request=False):
         project = Path(project).expanduser().resolve()
         project.mkdir(parents=True, exist_ok=True)
         root = state_root(project)
         require(not root.is_relative_to(project), "PRODUCT_CYCLE_HOME phải nằm ngoài dự án.")
         require(not root.exists(), "Dự án đã có một quy trình; dùng status để kiểm tra.")
-        require(brief.strip(), "Cần mô tả mục tiêu sản phẩm.")
+        require(brief.strip() or awaiting_request is True, "Cần mô tả mục tiêu sản phẩm.")
+        require(not awaiting_request or not brief.strip(), "Văn phòng chờ yêu cầu chưa nhận mô tả sản phẩm.")
         preparation = prepare_project(project) if mode == "live" else None
         root.mkdir(mode=0o700, parents=True)
         (root / "objects").mkdir()
         (project / ".product-cycle").mkdir(exist_ok=True)
         (root / "brief.md").write_text(brief.rstrip() + "\n")
         config = defaults(model, effort)
-        config.update({"name": name, "mode": mode, "created_at": now()})
+        config.update({"name": name, "mode": mode, "created_at": now(), "awaiting_request": awaiting_request})
         if mode == "demo":
             config.update(service_setup_required=False, project_setup_required=False, bootstrap_required=False,
                           gates=["analysis", "design", "plan", "handoff"],
@@ -146,6 +147,9 @@ class Store:
                     data TEXT NOT NULL, created_at TEXT NOT NULL
                 );
             """)
+            if awaiting_request:
+                db.execute("UPDATE meta SET value='paused' WHERE key='state'")
+                db.execute("INSERT INTO meta VALUES('onboarding.awaiting_request','1')")
         store = cls(project)
         previous = []
         stages = ["analysis", "design", "architecture", "plan"]
@@ -169,7 +173,11 @@ class Store:
 
     @property
     def config(self):
-        return json_object(self.root / "config.json")
+        config = json_object(self.root / "config.json")
+        pending = self.db.execute("SELECT value FROM meta WHERE key='onboarding.awaiting_request'").fetchone()
+        if pending:
+            config['awaiting_request'] = pending[0] == '1'
+        return config
 
     def foundation(self):
         path = self.root / "bootstrap.json"
@@ -301,6 +309,7 @@ class Store:
         return None
 
     def begin(self, tid, phase):
+        require(not self.config.get("awaiting_request"), "Văn phòng đang chờ yêu cầu; chưa giao công việc cho nhân viên.")
         self.validate_foundation()
         task = self.task(tid)
         feedback = None
@@ -735,6 +744,7 @@ class Store:
         return sorted(affected)
 
     def pause(self, paused):
+        require(paused or not self.config.get("awaiting_request"), "Hãy giao yêu cầu trước khi công ty bắt đầu làm việc.")
         with self.db:
             self.db.execute("UPDATE meta SET value=? WHERE key='state'", ("paused" if paused else "active",))
         self.event(None, "cycle.paused" if paused else "cycle.resumed", {})

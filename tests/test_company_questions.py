@@ -50,6 +50,7 @@ class CompanyQuestionTests(unittest.TestCase):
         run = self.mission()
         first = self.ask(run)
         self.assertEqual(self.ask(run)["id"], first["id"])
+        self.assertEqual(first["source_thread_id"], run["thread_id"])
         with self.assertRaises(WorkflowError):
             questions.ask(self.store, run, "Different question", [], None, "Need owner choice", "audience")
         with self.assertRaises(WorkflowError):

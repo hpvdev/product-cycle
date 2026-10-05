@@ -31,9 +31,16 @@ def parser():
     init.add_argument("--max-cycle-tokens", type=int, help="Ngân sách token toàn quy trình; mặc định chỉ theo dõi")
     init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"],
                       help="Dùng effort này cho mọi bước thay cho cấu hình theo vai trò")
-    for name in ["bootstrap", "install-skills", "update-skills", "uninstall-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress", "supervise", "team-stop", "team-status", "team-answer", "company-work", "company-claim", "company-bind", "company-submit", "company-stop", "company-improvements", "company-rollback"]:
+    for name in ["onboard", "bootstrap", "install-skills", "update-skills", "uninstall-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress", "supervise", "team-stop", "team-status", "team-answer", "company-work", "company-claim", "company-bind", "company-submit", "company-stop", "company-improvements", "company-rollback"]:
         cmd = sub.add_parser(name)
         cmd.add_argument("--project", required=True)
+        if name == "onboard":
+            cmd.add_argument("--name", help="Tên văn phòng hoặc dự án mới")
+            cmd.add_argument("--open", action="store_true", help="Mở dashboard local; chưa chạy nhân viên")
+            cmd.add_argument("--port", type=int, default=0, help="0 để tự chọn cổng trống")
+            cmd.add_argument("--brief", help="Ghi nhận yêu cầu sau khi đã mở văn phòng")
+            cmd.add_argument("--owner-thread", help="Gắn chat chủ sản phẩm thật trong đúng dự án")
+            cmd.add_argument("--start", action="store_true", help="Khởi động đội ngũ sau khi nhận yêu cầu")
         if name == "update-skills":
             cmd.add_argument("--apply", action="store_true", help="Áp dụng cập nhật; mặc định chỉ xem thay đổi")
             cmd.add_argument("--skill", action="append", help="Chỉ cập nhật skill này; có thể chọn nhiều lần")
@@ -209,6 +216,24 @@ def main(argv=None):
             return
         if args.command == "serve":
             return serve(args.project, args.port)
+        if args.command == "onboard":
+            from .onboarding import open_dashboard, submit_request, start_team, summary, bind_owner_chat
+            if not (state_root(Path(args.project).expanduser().resolve()) / "state.sqlite3").is_file():
+                require(not args.brief, "Mở văn phòng trước, sau đó giao yêu cầu trong chat Codex.")
+                require(args.name, "Chọn tên cho văn phòng mới.")
+                store = Store.create(args.project, "", args.name, team=True, awaiting_request=True)
+            else:
+                store = Store(args.project)
+            with runner_lock(store):
+                if args.brief:
+                    submit_request(store, Path(args.brief).read_text())
+                if args.owner_thread:
+                    bind_owner_chat(store, args.owner_thread)
+                url = open_dashboard(store, args.port) if args.open else None
+            if args.start:
+                start_team(store)
+            print(json.dumps(summary(store, url), ensure_ascii=False, indent=2))
+            return
         store = Store(args.project)
         if args.command == "status":
             print(json.dumps(store.snapshot(), ensure_ascii=False, indent=2))
