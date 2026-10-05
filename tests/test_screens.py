@@ -96,7 +96,7 @@ class ScreenTests(unittest.TestCase):
         complete_fixture(self.store, "plan", plan=self.plan())
         aid, directory = self.store.begin("T1", "work")
         rendered = directory / "render.png"
-        png(rendered, color=(50, 60, 70))
+        png(rendered, **self.target["viewport"], color=(50, 60, 70))
         report = {"baseline_version": "1", "source_fingerprint": fingerprint(self.store.project),
             "comparisons": [dict(self.target, reference_sha256=digest(self.image), rendered_image=str(rendered.relative_to(self.store.project)),
                 status="matched", observations=["Synthetic comparison, not aesthetic acceptance"])]}
@@ -107,14 +107,20 @@ class ScreenTests(unittest.TestCase):
     def test_screen_bundle_requires_images_states_and_valid_transitions(self):
         artifacts = {item["path"]: self.store.safe_path(item["path"]) for item in self.result["artifacts"]}
         validate_screen_design(self.baseline, {"R1"}, artifacts)
+        shared = copy.deepcopy(self.baseline)
+        screen = shared["screens"][0]
+        screen["references"][0]["viewport"] = {"width": 1280, "height": 800}
+        screen["states"].append({"id": "error", "name": "Error", "description": "Same layout with an error message"})
+        screen["references"].append(dict(screen["references"][0], state="error"))
+        validate_screen_design(shared, {"R1"}, artifacts)
         for mutation in ["image", "transition", "state", "viewport"]:
             with self.subTest(mutation=mutation):
                 baseline = copy.deepcopy(self.baseline)
                 screen = baseline["screens"][0]
                 if mutation == "image": screen["references"][0]["image"] = "missing.png"
                 if mutation == "transition": screen["transitions"][0]["to_screen"] = "missing"
-                if mutation == "state": screen["states"].append({"id": "error", "name": "Lỗi", "description": "Missing image"})
-                if mutation == "viewport": screen["references"][0]["viewport"]["width"] = 100
+                if mutation == "state": screen["states"].append({"id": "error", "name": "Lỗi", "description": "Missing reference mapping"})
+                if mutation == "viewport": screen["references"][0]["viewport"]["width"] = 0
                 with self.assertRaises(WorkflowError): validate_screen_design(baseline, {"R1"}, artifacts)
 
     def test_plan_cannot_skip_or_invent_screen_targets(self):
@@ -138,6 +144,8 @@ class ScreenTests(unittest.TestCase):
         self.assertEqual(snapshot["design_baseline"]["approval"], "approved")
 
     def test_build_rejects_missing_stale_wrong_reference_and_unrepaired_comparisons(self):
+        self.target["viewport"].update(width=80, height=60)
+        write_json(self.directory / "design-baseline.json", self.baseline)
         _, directory, report, result = self.prepare_build()
         self.store.validate_outputs("T1", result)
         for field, value in [("baseline_version", "2"), ("source_fingerprint", "stale"), ("comparisons", [])]:

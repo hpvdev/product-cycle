@@ -19,10 +19,14 @@ Use readable headings and action tables, not a generic checklist or an unreadabl
 **Per-screen specification:** include the following for each screen:
 
 - Purpose, applicable requirements and entry conditions; data shown, initial values and information source, without inventing unchosen API contracts.
-- Layout regions, content hierarchy and controls, with links to exact reference images/prototype views and their version/state/viewport. Describe responsive behavior relevant to supported devices. An image still awaiting approval is a proposed reference.
+- Layout regions, content hierarchy and controls, with links to selected reference images and their version/state/target viewport. Record target screen dimensions, responsive rules and how the reference maps to those layouts. An image still awaiting approval is a proposed reference.
 - Each actionable control or gesture: trigger, availability/preconditions, input validation, processing/business rule, data/state changes, visible feedback and destination. Include keyboard/touch alternatives where supported. Name which shared rule applies rather than repeating it.
 - Applicable loading, empty, disabled, error, success and recovery behavior. Specify repeated submissions, pending actions, cancellation/back navigation or persistence when they can affect this screen's intended outcome. Explain meaningful omissions; do not invent every possible state or unsupported features.
 - Observable acceptance examples covering the important actions and states. Keep functional expectations separate from visual comparison; a screenshot cannot prove a click works.
+
+An Image Gen image can be the canonical baseline directly; Figma is optional. Select images that clearly communicate layout, hierarchy, colors and components. Exact pixel dimensions or aspect ratio are not absolute acceptance conditions. Describe every applicable state, reusing the same reference when only numbers, text, messages or button states change; create separate images only for materially different layouts or presentation. When screen references are required, map the shared image to each applicable state/target viewport without duplicate target keys. No fixed image count is required.
+
+The reference guides appearance; this specification determines exact labels, symbols, behavior and layout rules. Document minor image discrepancies and intended corrections here. Correct or regenerate an image only when the discrepancy makes layout unclear or forces implementation to guess. Do not require Figma to compensate for generated text or pixel dimensions. Build/verify evaluates the reference together with these specified corrections.
 
 For example, if vocabulary gameplay has been approved:
 

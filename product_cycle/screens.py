@@ -88,7 +88,8 @@ def validate_screen_design(baseline, requirements, artifacts):
             require(text(ref.get("image")) and ref["state"] in state_ids and ref["image"] in artifacts and
                     artifacts[ref["image"]].suffix.lower() in IMAGE_SUFFIXES,
                     "Mẫu phải là ảnh đã đăng ký, đúng trạng thái của màn hình.")
-            require(image_size(artifacts[ref["image"]]) == keys[-1][2:], "Ảnh thiết kế cần đúng kích thước hiển thị đã ghi.")
+            # Reference pixels may differ from the intended runtime viewport.
+            require(all(size > 0 for size in image_size(artifacts[ref["image"]])), "Ảnh thiết kế cần kích thước hợp lệ.")
         require(len(set(keys)) == len(keys) and {ref["state"] for ref in refs} == state_ids,
                 "Bộ ảnh cần bao phủ từng trạng thái đã thiết kế, không trùng mẫu.")
         assets = screen.get("assets")
@@ -136,7 +137,7 @@ def validate_screen_comparisons(report, baseline, targets, artifacts, fingerprin
         rendered = row.get("rendered_image")
         require(text(rendered) and rendered in artifacts and artifacts[rendered].suffix.lower() in IMAGE_SUFFIXES,
                 "Ảnh giao diện thật cần được lưu và đăng ký làm bằng chứng.")
-        require(image_size(artifacts[rendered]) == key[2:], "Ảnh giao diện thật cần cùng kích thước với mẫu thiết kế.")
+        require(image_size(artifacts[rendered]) == key[2:], "Ảnh giao diện thật cần đúng kích thước hiển thị mục tiêu.")
         require(digest(artifacts[rendered]) != ref["sha256"], "Ảnh giao diện thật phải được chụp từ sản phẩm, không dùng lại ảnh thiết kế.")
         require(row.get("status") in {"matched", "needs_changes"} and isinstance(row.get("observations"), list) and
                 row["observations"] and all(text(note) for note in row["observations"]),
