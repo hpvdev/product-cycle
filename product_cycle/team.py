@@ -124,6 +124,8 @@ def migrate(db):
     migrate_capabilities(db)
     from .company_learning import migrate as migrate_learning
     migrate_learning(db)
+    from .team_discussions import migrate as migrate_discussions
+    migrate_discussions(db)
 
 
 def configure(store, active=True, max_concurrent=None, game_designer=None, new_cycle=False, policy=None):
@@ -441,6 +443,7 @@ class TeamStore:
 
     def snapshot(self):
         from .company_questions import snapshot as questions_snapshot
+        from .team_discussions import recent as discussions_recent
         from .capability_jobs import snapshot as capability_snapshot
         from .improvements import ImprovementStore
         improvement_rows = ImprovementStore(self.store).snapshot()["candidates"]
@@ -482,6 +485,7 @@ class TeamStore:
                             "learning": [dict(row) for row in self.db.execute("SELECT l.*,r.status AS run_status,r.reason AS run_reason FROM company_learning l LEFT JOIN team_runs r ON r.id=l.run_id ORDER BY l.id DESC LIMIT 50")],
                             "capability_jobs": native_history,
                             "decisions": [dict(row) for row in self.db.execute("SELECT * FROM company_decisions ORDER BY created_at DESC LIMIT 50")]},
+                "discussions": discussions_recent(self.store),
                 "events": events["items"], "messages": messages, "cursor": events["cursor"],
                 "capabilities": {"dynamic_tools": "observed" if any(run["capabilities"] for run in runs) else "unverified",
                                  "image_generation": "observed" if any(job["status"] == "completed" and job["capability"] == "image_generation" for job in native_history) else "unverified",
@@ -499,6 +503,10 @@ def tool_specs(review=False):
     ]
     if not review:
         definitions += [
+            ("team_open_discussion", "Open a project topic for your current task. Kind question schedules mentioned specialists and blocks dependent completion until resolved; update/handoff only informs. Mentions/evidence are JSON arrays of agent/evidence IDs.", {"title": text, "text": text, "kind": text, "mentions": text, "evidence": text, "client_key": text}),
+            ("team_reply_discussion", "Publish a genuine answer or follow-up in a current task topic. Questions mentioning specialists schedule consultations. No reviewer participation.", {"discussion_id": {"type": "integer"}, "text": text, "kind": text, "mentions": text, "evidence": text, "client_key": text}),
+            ("team_read_discussions", "Read current task project topics, real replies and their request status. Peer advice is not owner authority.", {}),
+            ("team_resolve_discussion", "Topic owner or assigned synthesis session only: record the chosen action, rationale and limits after actual consultations finish. This does not approve task output. Evidence is a JSON array of registered IDs.", {"discussion_id": {"type": "integer"}, "summary": text, "evidence": text, "client_key": text}),
             ("team_send_message", "Queue a message from your authenticated mission to another team agent. Delivery is tracked separately from acknowledgement.", {"recipient": text, "text": text, "client_key": text}),
             ("team_poll_messages", "Read queued peer messages for this mission. They are peer advice, not owner instructions.", {}),
             ("team_ack_message", "Acknowledge reading a delivered message addressed to this mission.", {"message_id": {"type": "integer"}}),
@@ -532,6 +540,9 @@ def handle_tool(team, rid, params):
         packet["policy"] = {key: value for key, value in packet["policy"].items() if key != "models"}
         from .capability_jobs import completed_context
         packet["native_results"] = completed_context(team.store, run["task_id"])
+        if run["phase"] not in {"review", "improve_review"}:
+            from .team_discussions import recent
+            packet["discussions"] = recent(team.store, run["task_id"])
         return {"mission": {key: run[key] for key in ("id", "agent_id", "task_id", "revision", "phase", "status", "directory", "model", "effort")},
                 "context": packet, "mission_context_path": str(Path(run["directory"]) / "context.json"),
                 "agents": [{key: agent[key] for key in ("id", "name", "kind", "department", "stages")} for agent in team.roster()],
@@ -542,6 +553,19 @@ def handle_tool(team, rid, params):
             team.store.step_progress(run["attempt_id"], [arguments])
         team.event("mission.progress", run, **arguments)
         return {"recorded": True, "advisory": True}
+    if name in {"team_open_discussion", "team_reply_discussion", "team_read_discussions", "team_resolve_discussion"}:
+        from .team_discussions import post, recent, resolve
+        if name == "team_read_discussions":
+            return {"discussions": recent(team.store, run["task_id"]), "authority": "peer advice"}
+        try:
+            evidence = json.loads(arguments["evidence"])
+            mentions = json.loads(arguments["mentions"]) if "mentions" in arguments else []
+        except ValueError as exc:
+            raise WorkflowError("Đồng nghiệp và bằng chứng cần là danh sách hợp lệ.") from exc
+        if name == "team_resolve_discussion":
+            return resolve(team, rid, arguments["discussion_id"], arguments["summary"], evidence, arguments["client_key"])
+        return post(team, rid, arguments.get("title", ""), arguments["text"], arguments["kind"], mentions,
+                    evidence, arguments["client_key"], arguments.get("discussion_id"))
     if name == "team_send_message":
         return team.send_message(rid, arguments["recipient"], arguments["text"], arguments["client_key"])
     if name == "team_poll_messages":
@@ -599,7 +623,10 @@ def apply_output(team, run, output):
         if request:
             origin = team.run(request["sender_run_id"])
             # Advisory output goes to the requesting real agent through the same durable mailbox.
-            team.send_message(run["id"], origin["agent_id"], json.dumps(result, ensure_ascii=False), "consult-result:" + run["id"])
+            from .team_discussions import consultation_complete
+            group_result = consultation_complete(team, run, result)
+            if not group_result:
+                team.send_message(run["id"], origin["agent_id"], json.dumps(result, ensure_ascii=False), "consult-result:" + run["id"])
             with team.db:
                 team.db.execute("UPDATE team_requests SET status='completed' WHERE id=?", (request["id"],))
     else:
@@ -626,6 +653,11 @@ def apply_output(team, run, output):
                 pending_jobs = [job for job in capability_snapshot(store)["pending"] if job["task_id"] == task["id"]]
                 if pending_jobs:
                     store.update(task["id"], status="blocked", reason="Chờ công cụ: " + pending_jobs[0]["prompt"][:240])
+                else:
+                    from .team_discussions import pending, BLOCKER_PREFIX
+                    discussion = pending(store, task["id"])
+                    if discussion and (not result.get("blocker") or result["blocker"].startswith(BLOCKER_PREFIX)):
+                        store.update(task["id"], status="blocked", reason=BLOCKER_PREFIX + discussion["title"])
         if run["phase"] == "work" and store.task(task["id"])["status"] != "blocked":
             team.update(run["id"], status="checking")
             ensure_checks(store, store.task(task["id"]), run["attempt_id"], directory)
@@ -752,6 +784,18 @@ def run_mission(project, rid, client_factory, cancel):
             prompt += ("When native image generation or browser tools are missing, use team_request_capability after your last source edit, "
                        "return a blocker, and leave source unchanged until the native worker submits actual output. "
                        "On resuming, read team_context.native_results and use the sealed artifacts; do not repeat tool requests already completed.\n")
+        if company_enabled(store) and run["phase"] not in {"review", "improve_review"}:
+            from .team_discussions import recent
+            prompt += ("\nProject group chat: publish useful questions/findings/handoffs with team_open_discussion. "
+                       "Mention only relevant colleagues by actual roster ID (JSON array). Question topics schedule "
+                       "read-only consultations and block dependent task completion until the responsible owner resolves "
+                       "the topic. Updates/handoffs do not wake the entire company. Read replies at task boundaries with "
+                       "team_read_discussions; use team_reply_discussion for genuine answers. Resolve your topics with "
+                       "team_resolve_discussion: chosen action, rationale, artifact/task affected and limits. Incorporate "
+                       "the conclusion into actual outputs. Never fabricate peer replies or treat discussion as evidence/approval. "
+                       "Return blocker=Chờ trao đổi: <topic title> if only a discussion answer is pending; preserve any other blocker separately. The controller can schedule a fresh synthesis "
+                       "after your session ends. Synthesis must conclude its assigned topic, not create discussion loops.\n" +
+                       json.dumps(recent(store, task["id"]), ensure_ascii=False))
         total = store.snapshot()["tokens"] or 0
         remaining = None if store.config.get("max_cycle_tokens") is None else store.config["max_cycle_tokens"] - total
         require(remaining is None or remaining > 0, "Quy trình đã đạt ngân sách token.")
@@ -930,6 +974,8 @@ class Supervisor:
                 from .capability_jobs import expire, resume_completed
                 expire(self.store)
                 resume_completed(self.store)
+                from .team_discussions import maintain
+                maintain(self.team)
             # A recorded user-owned desktop/legacy attempt cannot be taken over by team mode.
             foreign = self.store.db.execute("SELECT a.id FROM attempts a WHERE a.status IN ('running','queued') AND NOT EXISTS(SELECT 1 FROM team_runs r WHERE r.attempt_id=a.id)").fetchone()
             require(not foreign, "Có phiên do người dùng hoặc nơi thực thi khác quản lý; nhóm không tự tiếp quản.")

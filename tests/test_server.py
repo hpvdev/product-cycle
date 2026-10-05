@@ -62,11 +62,11 @@ class DashboardTests(unittest.TestCase):
 
     def test_additive_team_state_cursor_api_and_safe_assets(self):
         self.assertFalse(self.state["team"]["enabled"])
-        for route in ("/api/team", "/api/team/events?after=0&limit=1", "/api/team/messages?after=0&limit=1"):
+        for route in ("/api/team", "/api/team/events?after=0&limit=1", "/api/team/messages?after=0&limit=1", "/api/team/discussions?after=0&limit=1"):
             with urlopen(self.url + route, timeout=5) as response:
                 data = json.load(response)
             self.assertIn("enabled" if route == "/api/team" else "cursor", data)
-        for route in ("/api/team/events?after=-1", "/api/team/messages?limit=bad", "/assets/%2e%2e/store.py", "/assets/office/%2e%2e/%2e%2e/dashboard.html"):
+        for route in ("/api/team/events?after=-1", "/api/team/messages?limit=bad", "/api/team/discussions?after=-1", "/api/team/discussions?ids=not-a-topic", "/api/team/discussions?ids=0", "/assets/%2e%2e/store.py", "/assets/office/%2e%2e/%2e%2e/dashboard.html"):
             with self.subTest(route=route), self.assertRaises(HTTPError) as caught:
                 urlopen(self.url + route, timeout=5)
             self.assertIn(caught.exception.code, (400, 404))

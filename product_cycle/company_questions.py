@@ -154,6 +154,8 @@ def resume_answered(store, task_id=None):
                 continue
             timestamp = now()
             ids = [row["id"] for row in questions]
+            from .team_discussions import pending, BLOCKER_PREFIX as discussion_prefix
+            discussion = pending(store, task["id"])
             pending_native = store.db.execute("""SELECT prompt FROM capability_jobs WHERE task_id=? AND revision=?
                 AND status IN ('queued','claimed','bound','unknown') ORDER BY rowid LIMIT 1""",
                 (task["id"], task["revision"])).fetchone()
@@ -161,12 +163,14 @@ def resume_answered(store, task_id=None):
                 from .capability_jobs import BLOCKER_PREFIX as capability_prefix
                 store.db.execute("UPDATE tasks SET reason=? WHERE id=?",
                                  (capability_prefix + pending_native["prompt"][:240], task["id"]))
+            elif discussion:
+                store.db.execute("UPDATE tasks SET reason=? WHERE id=?", (discussion_prefix + discussion["title"], task["id"]))
             else:
                 store.db.execute("UPDATE tasks SET status='rework',reason=NULL WHERE id=?", (task["id"],))
             store.db.executemany("UPDATE company_questions SET consumed_at=? WHERE id=?",
                                  [(timestamp, question_id) for question_id in ids])
             result = {"task_id": task["id"], "revision": task["revision"], "question_ids": ids}
-            if pending_native:
+            if pending_native or discussion:
                 result["status"] = "blocked"
             store.db.execute("INSERT INTO events(task_id,type,data,created_at) VALUES(?,'company.questions.resumed',?,?)",
                              (task["id"], json.dumps(result), timestamp))

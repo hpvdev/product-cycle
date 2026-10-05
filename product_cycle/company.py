@@ -25,6 +25,7 @@ def recovery_signature(store, task):
 def management_jobs(store):
     from .company_questions import snapshot
     from .capability_jobs import snapshot as capability_snapshot
+    from .team_discussions import pending
     questions = snapshot(store)["open"]
     native_jobs = capability_snapshot(store)["pending"]
     for task in store.tasks():
@@ -33,6 +34,9 @@ def management_jobs(store):
         if any(job["task_id"] == task["id"] and job["status"] in {"queued", "claimed", "bound", "unknown"} for job in native_jobs):
             continue
         if store.db.execute("SELECT id FROM team_runs WHERE task_id=? AND revision=? AND status IN ('preparing','dispatching','running','checking','unknown','backoff')", (task["id"], task["revision"])).fetchone():
+            continue
+        discussion = pending(store, task["id"])
+        if discussion and discussion["status"] == "open":
             continue
         signature = recovery_signature(store, task)
         if not store.db.execute("SELECT run_id FROM company_decisions WHERE task_id=? AND signature=?", (task["id"], signature)).fetchone():
@@ -72,6 +76,10 @@ def apply_repairs(store):
         elif row["action"] != "repair":
             status = "waiting" if row["action"] == "wait" else "awaiting_answer"
         else:
+            from .team_discussions import pending
+            discussion = pending(store, task["id"])
+            if discussion and discussion["status"] == "open":
+                continue
             from .capability_jobs import snapshot as capability_snapshot, source_in_use
             if source_in_use(store) or any(job["task_id"] == task["id"] for job in capability_snapshot(store)["pending"]):
                 continue

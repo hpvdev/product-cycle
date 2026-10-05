@@ -442,17 +442,21 @@ def resume_completed(store, task_id=None):
             if not current or any(job["source_fingerprint"] != fingerprint(store.project) for job in jobs):
                 continue
             ids = [row["id"] for row in current]
+            from .team_discussions import pending, BLOCKER_PREFIX as discussion_prefix
+            discussion = pending(store, task["id"])
             open_question = store.db.execute("""SELECT question FROM company_questions WHERE task_id=? AND revision=?
                 AND status='open' ORDER BY rowid LIMIT 1""", (task["id"], task["revision"])).fetchone()
             if open_question:
                 from .company_questions import BLOCKER_PREFIX as question_prefix
                 store.db.execute("UPDATE tasks SET reason=? WHERE id=?",
                                  (question_prefix + open_question["question"], task["id"]))
+            elif discussion:
+                store.db.execute("UPDATE tasks SET reason=? WHERE id=?", (discussion_prefix + discussion["title"], task["id"]))
             else:
                 store.db.execute("UPDATE tasks SET status='rework',reason=NULL WHERE id=?", (task["id"],))
             store.db.executemany("UPDATE capability_jobs SET consumed_at=? WHERE id=?", [(now(), jid) for jid in ids])
             result = {"task_id": task["id"], "revision": task["revision"], "job_ids": ids}
-            if open_question:
+            if open_question or discussion:
                 result["status"] = "blocked"
             _event(store, jobs[0], "resumed", job_ids=ids)
             resumed.append(result)

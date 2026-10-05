@@ -139,13 +139,23 @@ def serve(project, port=8787):
                 if route == "/api/team":
                     from .team import TeamStore
                     return self.reply(200, TeamStore(store).snapshot())
-                if route in {"/api/team/events", "/api/team/messages"}:
+                if route in {"/api/team/events", "/api/team/messages", "/api/team/discussions"}:
                     from .team import TeamStore
                     query = parse_qs(urlparse(self.path).query)
                     try:
                         after, limit = int(query.get("after", ["0"])[0]), int(query.get("limit", ["100"])[0])
                     except ValueError:
                         raise WorkflowError("Mốc đọc lịch sử chưa hợp lệ.")
+                    if route.endswith("discussions"):
+                        from .team_discussions import page, by_ids
+                        TeamStore(store)
+                        if "ids" in query:
+                            try:
+                                ids = [int(value) for value in query["ids"][0].split(",")]
+                            except ValueError:
+                                raise WorkflowError("Chọn các cuộc trao đổi đã được ghi nhận.")
+                            return self.reply(200, by_ids(store, ids))
+                        return self.reply(200, page(store, after, limit))
                     return self.reply(200, TeamStore(store).page("team_events" if route.endswith("events") else "team_messages", after, limit))
                 if route.startswith("/evidence/"):
                     eid = route.rsplit("/", 1)[-1]
