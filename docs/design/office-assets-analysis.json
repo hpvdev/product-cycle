@@ -1,0 +1,43 @@
+{
+  "asset_id": "analysis",
+  "filename": "analysis.png",
+  "output_path": "product_cycle/web/assets/office/analysis.png",
+  "source_reference": "docs/design/agent-office-open-studio.png",
+  "source_reference_absolute": "/Users/hungpham/Documents/Product-Cycle/docs/design/agent-office-open-studio.png",
+  "original_image_path": "/Users/hungpham/.codex/generated_images/01a10700-3e86-74e1-bf16-8b69e3e514f4/exec-2eb423e8-15ef-4bca-bef7-71ee45f70765.png",
+  "tool": "built-in image_gen",
+  "transparent_background": true,
+  "prompt": "Use case: background-extraction.\nAsset type: one reusable transparent PNG workstation cluster for the approved Open Studio office scene.\nInput image: /Users/hungpham/Documents/Product-Cycle/docs/design/agent-office-open-studio.png is the edit target and sole visual reference.\nPrimary request: Faithfully extract ONLY the upper-left BA workstation occupied by the black-haired man in a sage green sweater, thoughtfully seated with one hand to his face. Include the complete man, slate office chair, entire light wood desk with its pale modesty panel and legs, one dark monitor seen from the back, keyboard/papers and the small desk plant and mug belonging to this workstation. Reconstruct any obscured parts naturally so all objects are complete and uncropped.\nInvariants: Keep the exact original isometric camera, orientation, character identity/pose, proportions, soft daylight, muted colors, polished softly shaded 3D illustration art direction and materials. Do not mirror or rotate. Preserve the desk-front orientation toward lower-left and the original character/monitor relationship. Match the referenced BA workstation, not the neighboring pink, yellow, or blue workstations.\nComposition: One coherent workstation cluster centered with modest transparent padding around all edges; include all desk legs, chair and shoes fully. Render the asset larger and clear while preserving its original shapes.\nBackground: genuinely transparent alpha everywhere outside the cluster, including gaps between objects; retain at most a gentle local contact shadow immediately beneath feet/legs.\nRemove completely: office floor or floor tile, walls, windows, room plants, other workers/workstations, speech/status labels, text, nameplates, arrows, all surrounding UI, watermarks, and broad environmental shadows. No written text anywhere. Do not add new furniture, extra monitors, decorative bases, or background.",
+  "width": 1385,
+  "height": 1136,
+  "format": "PNG",
+  "mode": "RGBA",
+  "verification": {
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "fully_transparent_pixels": 952849,
+    "total_pixels": 1573360,
+    "corner_alpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "visible_bounds_alpha_at_least_8": [
+      270,
+      92,
+      1238,
+      1072
+    ],
+    "inspected": true,
+    "original_preserved": true
+  },
+  "fidelity_notes": [
+    "Preserves the BA's sage sweater, black hair and glasses, thoughtful hand-to-face pose, single rear-view monitor, light wood desk, pale modesty panel and slate office chair.",
+    "Complete isolated cluster with keyboard, paper/notebook, mug and small desk plant; no floor tile, surrounding office, other workers, labels or UI.",
+    "Generated reconstruction rather than pixel-identical crop: desk props and occluded lower chair/legs are reconstructed.",
+    "A few near-transparent alpha values below 8 occur outside the visible cluster, including 13 pixels on the bottom edge; visible objects retain padding."
+  ]
+}

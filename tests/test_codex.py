@@ -8,6 +8,21 @@ from product_cycle.contracts import WorkflowError
 
 
 class CodexProtocolTests(unittest.TestCase):
+    def test_dynamic_tool_round_trip_is_real_rpc_and_does_not_approve_requests(self):
+        from product_cycle.team import tool_specs
+        with tempfile.TemporaryDirectory() as folder:
+            events, calls = [], []
+            command = [sys.executable, str(Path(__file__).with_name("fake_appserver.py")), "dynamic"]
+            def handler(params):
+                calls.append(params)
+                return {"advisory": True}
+            with CodexClient(Path(folder), command=command, on_event=events.append) as client:
+                result = client.run(Path(folder), "Synthetic dynamic tool test", "test-model", "high", {"type": "object"}, readonly=True,
+                                    dynamic_tools=tool_specs(), tool_handler=handler, timeout=3)
+            self.assertEqual(calls[0]["callId"], "fixture-call")
+            self.assertTrue(result["result"]["tool_response"]["success"])
+            self.assertTrue(any(event.get("method") == "client/toolResponse" for event in events))
+
     def run_peer(self, mode="success", max_tokens=100, timeout=3, title=None):
         with tempfile.TemporaryDirectory() as folder:
             directory = Path(folder)

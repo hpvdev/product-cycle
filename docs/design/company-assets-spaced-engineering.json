@@ -1,0 +1,46 @@
+{
+  "source": "/Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-099c15e2-9ae7-4997-8ce8-73c9110a4ce9.png",
+  "runtime": "product_cycle/web/assets/office/departments/engineering-spaced.png",
+  "mode": "built-in ImageGen edit",
+  "native_dimensions": [
+    1536,
+    1024
+  ],
+  "transparent": true,
+  "purpose": "Eight separate desks, wider staff spacing and nearby full role labels. Original cool office backdrop retained.",
+  "heads": {
+    "architecture": [
+      191,
+      151
+    ],
+    "build": [
+      575,
+      152
+    ],
+    "frontend": [
+      960,
+      148
+    ],
+    "backend": [
+      1344,
+      150
+    ],
+    "mobile": [
+      191,
+      621
+    ],
+    "performance": [
+      576,
+      621
+    ],
+    "architecture_reviewer": [
+      961,
+      621
+    ],
+    "build_reviewer": [
+      1346,
+      621
+    ]
+  },
+  "prompt": "Use case: precise-object-edit. Edit target: provided engineering department transparent cutout. Create a revised spacious seating arrangement, same exactly eight people, their blue/white clothes, appearance, polished crisp 3D illustration, cool palette, light wood desks, monitors and chairs. Arrange four columns and two rows of separate INDIVIDUAL desk islands, with generous empty transparent gaps between columns and a broad transparent aisle between rows. All eight people face toward the viewer as in the current back row so heads are visible; stagger nothing. Four evenly spaced people across upper row, four evenly spaced across lower row. Each person has own small rectangular desk, monitor and chair; no shared bench, no connected desks. Individual people remain same apparent size, spacing increases substantially. Reserve blank space above each person's head for an HTML role label; DO NOT draw text or labels. Exact eight people only. Front raised camera matching source, sharp clean edges. Entire asset surrounded by transparent alpha, no floor, wall or room background, no outline frame. Wide landscape composition 2400x1600 if possible. Do not change palette to warm. Output production cutout."
+}

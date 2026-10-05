@@ -1,48 +1,56 @@
-# Dashboard canvas design QA
+# Office dashboard design QA
 
-Source visual truth: `docs/design/workflow-canvas-concept.png`.
-Implementation: http://127.0.0.1:8787/, Quy trình, selected UI/UX stage.
-Full-view evidence: `.runtime/ui-design/comparison-final.png`.
-Focused evidence: `.runtime/ui-design/comparison-detail.png`.
-Implementation screenshot: `.runtime/ui-design/dashboard-qa-final.png`.
-Expanded canvas evidence: `.runtime/ui-design/dashboard-wide.png`.
+## Visual truth and state
 
-## Comparison scope
+- Source: `product_cycle/web/assets/office/company-wide-base.png` (1774 × 887 pixels), regenerated transparent assets in `product_cycle/web/assets/office/departments/`. The previous `docs/design/agent-company-final.png` remains historical reference.
+- Implementation: `http://127.0.0.1:8790/`, read-only office projection.
+- Final evidence: `docs/design/company-wide-1920.jpg` (1920 × 1080), `docs/design/company-wide-1440.jpg` (1440 × 1000), `docs/design/company-wide-panel.jpg` (580 × 791, actual in-app panel and focused engineering view).
+- CSS viewports match screenshot pixels, devicePixelRatio 1. Source room content was compared within the implementation canvas, excluding native dashboard chrome. Source and screenshots were opened together in the same comparison input.
+- State: synthetic preview, 31 roster positions, 0 working sessions, supervisor stopped. The static artwork does not establish actual agent activity.
+- Original cool palette retained at the user's request. Native labels, panels and semantic status controls are intentional additions to the illustration.
 
-The source is a direction concept, not a literal screenshot of a real cycle. Its illustrative tasks, statuses, icons and parallel branches must not replace recorded workflow data. The implementation keeps the stage frames, connected work/step cards, light blue palette, minimap and right inspector, and adds the requested independent panel controls. Real dependency arrows and sequential steps replace invented branches. The existing token and execution summary is intentionally retained.
+## Comparison history and findings
 
-Source pixels: 1487 × 1058. Final implementation capture: 1035 × 879; measured CSS viewport: 1050 × 892. Native screenshots exclude some surrounding scroll area. Earlier captures used 1280 × 720 and a wider desktop viewport. Browser dimensions changed during inspection; these are explicitly different responsive states, not a pixel-perfect comparison. The combined inputs preserve aspect ratio and letterbox into common frames without claiming a numeric similarity score. Diagram zoom is 85%; nodes can be enlarged individually or inspected in fullscreen.
+1. Earlier 1920 capture: long titles broke inside words. [P2] Corrected to word wrapping, full titles without ellipsis. Post-fix evidence: `company-final-1920.jpg`.
+2. Employee/team selection changed camera unexpectedly. [P2] Removed automatic pan/zoom and panel refitting. Browser checked unchanged camera transform after employee and department selection; explicit Fit remained available.
+3. The source cutouts retained considerably more detail than the displayed engineering region; zoomed scene and its text appeared blurred. [P2] Removed parent bitmap scaling and persistent `will-change`; image dimensions and coordinates are rendered natively. Source engineering image and final actual-panel screenshot were opened together: faces and text now remain clear at the readable starting view.
+4. At Fit, title fonts shrank and labels were crowded. [P2] Added a genuinely regenerated wider base, a 3600 × 1800 logical room, enlarged team clusters (engineering 800px), native 11px full titles, local placement and semantic overview. Actual small-panel starting view contains eight readable employee titles; whole-office overview intentionally shows departments with full roster access, rather than scattering role labels across the floor.
+5. A first local-placement attempt put DEV's label far above its head because the department heading blocked the nearby band. [P2] Shifted department headings upward and removed all distant/global placement fallbacks. Recaptured actual 580 × 791 view shows all eight titles close to their employees without the long detour. Partly clipped department headings no longer overlap the bottom toolbar.
 
-## Findings and fixes
+## Fidelity surfaces
 
-- [P1, fixed] The expanded execution report and duplicate overview placed the canvas below the fold. Full reports remain available in Overview; the graph pages now keep a compact status header.
-- [P2, fixed] Initial stage fitting reduced text to 57%. Initial focus now retains a readable minimum zoom; fit-all remains available for orientation. Work and step cards were increased in height to avoid clipped names.
-- [P2, fixed] The screen gallery initially stacked its inspector beneath the canvas. The layout now uses two columns and honors its empty/hidden state.
-- [P2, fixed] The canvas minimum height pushed its minimap below the viewport. Available height is now measured from its visible position, and the inspector follows the canvas height. The expanded-canvas screenshot shows the minimap and controls in view.
-- [P2, fixed] New screen-design wording described legacy completed work as a completed image bundle. Progress labels now follow the legacy contract when that policy is absent; sealed cycle evidence was not rewritten.
+- Typography: native system font, clear header hierarchy, full role names at a fixed 11px readable-view size; no employee ellipsis. Overview is intentionally department-level, with complete names retained in the roster.
+- Layout rhythm: eight team zones, wide central paths and three amenity areas retained; local label bands and wider personnel spacing prevent the previous crossing-line clutter.
+- Colors: original cool white/blue room and native chrome retained; no warm alternative selected.
+- Imagery: all eight department groups and three amenities are actual generated raster assets, with transparency and aspect ratio preserved. No decorative illustration was replaced by CSS or SVG. Native rendered source comparison confirms clear staff imagery in the actual panel. The generated backdrop is 1774 × 887 despite a higher-resolution prompt; it is not described as a native 4K image. Extreme magnification remains limited by raster source resolution.
+- Copy/content: full actual company role titles, explicit synthetic preview marker and stopped supervisor state; no invented active work.
 
-## Required fidelity surfaces
+## Interaction and technical evidence
 
-- Typography: native system sans-serif is retained deliberately. Stage, work and step names have distinct weights and sizes; longer names wrap and exact text remains available in the inspector. The concept did not supply an authoritative font file. No claim of exact font matching.
-- Spacing/layout: outlined stage frames contain a larger work card and connected step cards. Readable node sizes take priority over squeezing all recorded nodes onto one screen. At narrow desktop widths, pan/zoom, fit, fullscreen and hiding either panel keep the full graph reachable.
-- Colors: pale blue stage backgrounds, white cards, blue selection borders and distinct green/amber recorded states preserve the selected direction. State colors follow actual results rather than the concept's illustrative pending states.
-- Image quality: diagram geometry is a code-native data visualization. Concept icons were intentionally omitted rather than copied as decorative raster content. The separate screen gallery displays registered reference/render images without flattening the workflow into an image; opening an image uses the existing evidence reader.
-- Content: all recorded stages, tasks and small steps are shown. The current cycle's legacy design is not presented as a newly approved image bundle. The gallery clearly distinguishes proposal/approval, worker comparison, independent review and historical captures.
+- Browser verified employee selection, department filtering and inspector close while preserving camera, and reverified WEB selection after the native-layout changes.
+- All 12 scene image paths loaded (base plus 11 cutouts); 31 employee controls present.
+- Browser error/warning log empty during the 1440 check.
+- Separate read-only source review verified camera preservation, keyboard/focus behavior and stale-state handling. It does not replace rendered visual QA.
 
-## Comparison history and checks
+## Implementation checklist
 
-Initial screenshot: `.runtime/ui-design/dashboard-before.png`. First rendered comparison and fixes are above; intermediate capture: `.runtime/ui-design/dashboard-after.png`. Post-fix combined source/render input and focused input were inspected together before this report. Final expanded-panel capture verifies the viewport repair.
+- [x] Render images at native CSS destination sizes rather than scaling the whole world bitmap.
+- [x] Use legible local labels at detail scale and a coherent department overview at small scale.
+- [x] Regenerate and widen the office; preserve asset aspect ratios.
+- [x] Recapture desktop and actual narrow-panel views; compare source and implementation together.
 
-Browser checks: select an actual small step and inspect its evidence; hide/restore each panel; fit; zoom; pan; enter/exit fullscreen; navigate to the legacy gallery empty state. On an isolated synthetic cycle, inspect a registered reference/render pair, a self-transition, an evidence image dialog and a linked build task. Browser error logs were empty. The synthetic fixture verifies dashboard bindings, not actual product fidelity, interaction quality or autonomous delivery.
+## Limitations
 
-## Remaining limits
+Desktop is the requested target. Mobile acceptance and a full autonomous product delivery are outside this visual check. Real agent communication is being tested separately following the user's explicit request.
 
-The real Vocab Blaster cycle predates the per-screen image contract. Its visual quality has not been repaired or reaccepted by this dashboard change. It still needs a newly reviewed screen bundle to use the gallery as its design source of truth. Group collapsing and a user-edited graph are outside this read-only dashboard scope.
+## Additional spacing iteration
 
-Final result: passed
+- User requested additional physical seating separation so full role titles can sit close to each employee.
+- Enlarged the room from3600×1800 to4800×2400; increased all department cluster widths. Regenerated the engineering group using built-in ImageGen as eight separate desk islands, preserving cool colors and actual alpha. Asset is1536×1024, not claimed as4K. Exact prompt/source: `docs/design/company-assets-spaced-engineering.json`.
+- Engineering minimum head-center distance is275 logical pixels, compared with roughly168 in the previous cluster. Lower-row workers now face forward, and their titles sit above their heads rather than over chairs. Department titles moved further upward to free this label band.
+- A label that cannot fit near a viewport edge no longer hides other employees' valid labels. Whole-office Fit continues to show department overview rather than densely stacking31 full titles. Narrow panels show the visible part of a team and can be panned explicitly.
+- Captured `company-spaced-panel.jpg` (580×791) and `company-spaced-desktop.jpg` (1920×1080). Opened generated source and final desktop render in the same comparison input: eight distinct desks, aspect ratio preserved, all eight engineering role titles close to the corresponding heads; no actionable P0/P1/P2 visual mismatch. Original background preserved.
+- Actual desktop DOM check found18 visible labels and no pairwise label intersections. Browser selected WEB, opened its correct full-title inspector and confirmed camera style unchanged; closing inspector also left the view intact. Browser error/warning log empty. Independent source review found no actionable geometry, mapping or camera issue.
+- These latest captures show the live disposable test project, not the earlier synthetic preview. Activity reflects the actual controller; the artwork itself remains illustrative. Full agent/product-cycle evaluation is separate from this visual acceptance.
 
-No remaining actionable P0/P1/P2 finding within the requested dashboard capability. This is a design-direction and interaction review, not a claim of pixel-perfect replication or approval of Vocab Blaster.
-
-## Inspector follow-up
-
-[P1, fixed] Fullscreen previously expanded only the diagram element, excluding the inspector. It now expands the diagram layout and inspector together. A visible “Hiện chi tiết / Ẩn chi tiết” toolbar button works in normal and fullscreen views. Selecting a work/step node also restores its inspector. Browser verification covered selecting an actual small step with the inspector initially hidden, showing its description and evidence within fullscreen, toggling the inspector twice, and exiting fullscreen with the selection retained. No browser errors observed. Evidence: `.runtime/ui-design/dashboard-detail-fullscreen.png`. JavaScript syntax checks and diff whitespace checks passed. No cycle task was resumed or evidence changed for this verification.
+final result: passed

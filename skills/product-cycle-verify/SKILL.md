@@ -22,3 +22,7 @@ When invoked on its own, perform only the requested stage in the selected projec
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
 
 When policy.screen_design_required is true, read context.screen_design_contract for the assigned stage. Design inventories all screens/states/transitions before creating an owner-approved image bundle. Plan binds increments to specific screen/state/viewport targets. UI build and verify retain actual image-to-render comparisons against that bundle, with functional evidence separate. Never downgrade an approved image to a style hint or silently drop its assets.
+
+## Khi sản phẩm là game
+
+If the brief or accepted direction asks for a game, read [Game Design](../product-cycle-game-design/SKILL.md) as a companion to this stage. Use its verification guidance for actual play observations, controls, feedback, timing/turn resolution and recovery/replay. Keep behavior, visual fidelity, owner experience judgment and learning effectiveness distinct. Keep accepted scope, configured owner gates and evidence boundaries; the companion is not a new stage or an execution command.

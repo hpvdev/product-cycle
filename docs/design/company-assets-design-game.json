@@ -1,0 +1,49 @@
+{
+  "tool": "built-in image_gen",
+  "reference": "docs/design/agent-company-final.png",
+  "transparent_background": true,
+  "assets": [
+    {
+      "id": "design",
+      "original": "/Users/hungpham/.codex/generated_images/01a1070c-be07-7b43-97a9-da8d82dea3d7/exec-a1ef4332-2baf-454a-85c4-a9bfc9a2c7ca.png",
+      "saved": "product_cycle/web/assets/office/departments/design.png",
+      "prompt": "Use case: background-extraction. Asset type: high-resolution transparent department cluster for a native 2.5D company dashboard. Image 1 is the exact source and edit target. Extract and faithfully reconstruct ONLY the DESIGN team cluster in the upper row, third zone from the left, centered around source coordinates x=1020,y=270 in the 1774x887 image. Keep exactly FOUR employees, all four desk positions and monitors/tablets, the shared light-wood square desks, four complete rolling chairs including legs/casters, the compact cabinet/pinboard/framed art and small potted desk plants belonging to this cluster. Preserve each employee's appearance, clothing, facing direction, seated pose and relative arrangement: pink-clad dark-haired employee upper-left, brown-clad employee upper-right, pale-shirted dark-haired employee lower-left, pink-clad light-haired employee lower-right. Preserve exact source orthographic oblique camera and soft premium light/navy/blue 2.5D illustrated rendering, geometry, material, lighting. Reconstruct crisp fine details at approximately 1536x1536 high resolution. Cluster should fill most of the square with only modest safe transparent padding, every chair/table leg/object fully inside frame. No unrelated people or nearby zones. IMPORTANT genuine transparent alpha everywhere outside object silhouettes, including between chairs/desk legs; NO pink rug, no floor, no shadow rectangle, no office backdrop, no walls, no windows, no labels, no text, no UI. Keep only subtle object-contact shadows attached to objects. This is a sharpened asset extraction, not a redesigned layout.",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "fully_transparent_percent": 58.4,
+      "alpha_bbox": [
+        0,
+        13,
+        1234,
+        1254
+      ],
+      "inspection": "Visually checked correct team count, complete people/desks/chairs/cabinet props, no rug/floor/background/UI. High-resolution ImageGen redraw preserves arrangement, with minor detail changes and faint edge alpha noise. No cropping/resampling/pixel edits."
+    },
+    {
+      "id": "game",
+      "original": "/Users/hungpham/.codex/generated_images/01a1070c-be07-7b43-97a9-da8d82dea3d7/exec-d72f4045-0264-4024-a0cb-c47caacb8b43.png",
+      "saved": "product_cycle/web/assets/office/departments/game.png",
+      "prompt": "Use case: background-extraction. Asset type: high-resolution transparent department cluster for native 2.5D company dashboard. Image 1 is the exact source and edit target. Extract and faithfully reconstruct ONLY the GAME STUDIO cluster in the lower-left corner of the 1774x887 source, around x=220,y=650. Keep exactly THREE employees and their original relative positions, the joined light-wood three-seat desk cluster, three complete rolling chairs including legs/casters, monitors including the small vivid game scene screen, cups, desk plants and yellow wood low bookcase behind this cluster. Preserve yellow-clad dark-haired employee upper-left, yellow-clad brown-haired employee upper-right and pale-shirted dark-haired employee lower-center with back to viewer. Preserve exact source orthographic oblique camera, seated poses, body sizes and arrangement, appearance, material, lighting and premium light/navy/blue soft 2.5D illustrated style. Reconstruct crisp details at approximately 1536x1536, tightly fit the complete group with modest safe transparent padding, every table/chair leg/object fully inside frame. IMPORTANT genuine transparent alpha outside the object silhouettes and between legs. Absolutely NO orange rug, no floor, no office background/walls/windows, no unrelated people or furniture from other zones, no labels/text/UI, no solid shadow slab. Object-attached contact shadows may remain. Keep arrangement faithful, do not redesign, add people or change camera.",
+      "width": 1254,
+      "height": 1254,
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "fully_transparent_percent": 61.8,
+      "alpha_bbox": [
+        0,
+        21,
+        1214,
+        1254
+      ],
+      "inspection": "Visually checked correct team count, complete people/desks/chairs/cabinet props, no rug/floor/background/UI. High-resolution ImageGen redraw preserves arrangement, with minor detail changes and faint edge alpha noise. No cropping/resampling/pixel edits."
+    }
+  ]
+}

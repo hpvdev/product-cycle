@@ -1,0 +1,144 @@
+{
+  "source": "/Users/hungpham/Documents/Product-Cycle/docs/design/agent-company-final.png",
+  "source_dimensions": [1774, 887],
+  "method": "Built-in image_gen.imagegen; transparent_background=true; copied native PNG bytes without cropping, resizing, alpha manipulation, or code-based image editing.",
+  "requested_dimensions": [
+    1536,
+    1536
+  ],
+  "actual_dimensions_note": "The built-in tool returned native 1254×1254 images. They were preserved without upscaling.",
+  "visual_check": "Viewed each generated file. Correct team people counts 2/3/6; furniture/chairs/bookcases/associated props retained; no rugs, office floor, background, labels or dashboard UI. Camera/style/relative arrangement preserved as an ImageGen extraction rendition; no claim of pixel-identical extraction.",
+  "artifacts": [
+    {
+      "id": "data_ai",
+      "people": 2,
+      "path": "/Users/hungpham/Documents/Product-Cycle/product_cycle/web/assets/office/departments/data_ai.png",
+      "original_path": "/Users/hungpham/.codex/generated_images/01a10728-5cc4-7b01-819c-20a13e9a5253/exec-8985ee97-ae80-4c21-840c-a35a5866af6f.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "true_alpha_verified": true,
+      "viewed": true,
+      "transparent_pixels": 1007437,
+      "opaque_pixels": 811,
+      "content_bbox": [
+        0,
+        21,
+        1240,
+        1182
+      ],
+      "head_centers_normalized": [
+        [
+          0.274,
+          0.395
+        ],
+        [
+          0.748,
+          0.438
+        ]
+      ],
+      "head_centers_note": "Approximate visual estimates for overlay alignment, ordered left/right (data), rear/front-left/front-right (operations), far-left/far-center/far-right/near-left/near-center/near-right (quality).",
+      "prompt": "Use case: background-extraction. Asset type: crisp transparent PNG component for a software-company office scene.\nInput image: the attached local source is the edit target. Extract only the specified departmental furniture-and-people cluster. Preserve its exact elevated orthographic/isometric camera, soft polished 2.5D illustrated rendering, faces, clothing, chair positions, wood furniture, material colors, object scale relationships, lighting and relative arrangement. Remove everything outside the cluster. Produce a sharp high-resolution image, ideally 1536 x 1536 pixels, centered with tight transparent padding and every complete object safely inside the canvas.\nBackground must be genuinely transparent with an alpha channel. NO colored rug, NO floor tile, NO solid ground/platform/base, NO windows/walls/environment, NO other teams, NO labels, NO dashboard controls/UI, NO text, NO watermark. Retain only the specified people, their desks, chairs, bookcase/cabinet and directly associated small props/plants. Keep monitor displays as abstract unobtrusive screen content without readable text. Do not redesign the cluster or change the perspective.\nTarget: the TWO-person Data & AI cluster in the BOTTOM ROW, SECOND zone from the LEFT, originally on the CYAN/TEAL rug around x=620,y=670. Include exactly the seated short-dark-haired man wearing teal on the left and the long-dark-haired woman wearing light/teal clothing on the right, their opposing wooden workstation with monitors and central divider, two office chairs, desk mugs/books/plants, and the small white bookcase with books and potted plants directly behind this cluster. Preserve this exact two-person cluster. Remove its cyan rug and every surrounding office/environment object."
+    },
+    {
+      "id": "operations",
+      "people": 3,
+      "path": "/Users/hungpham/Documents/Product-Cycle/product_cycle/web/assets/office/departments/operations.png",
+      "original_path": "/Users/hungpham/.codex/generated_images/01a10728-5cc4-7b01-819c-20a13e9a5253/exec-04133381-c703-47b5-98d0-74571b9e090f.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "true_alpha_verified": true,
+      "viewed": true,
+      "transparent_pixels": 919527,
+      "opaque_pixels": 844,
+      "content_bbox": [
+        0,
+        50,
+        1192,
+        1254
+      ],
+      "head_centers_normalized": [
+        [
+          0.488,
+          0.236
+        ],
+        [
+          0.277,
+          0.515
+        ],
+        [
+          0.715,
+          0.516
+        ]
+      ],
+      "head_centers_note": "Approximate visual estimates for overlay alignment, ordered left/right (data), rear/front-left/front-right (operations), far-left/far-center/far-right/near-left/near-center/near-right (quality).",
+      "prompt": "Use case: background-extraction. Asset type: crisp transparent PNG component for a software-company office scene.\nInput image: the attached local source is the edit target. Extract only the specified departmental furniture-and-people cluster. Preserve its exact elevated orthographic/isometric camera, soft polished 2.5D illustrated rendering, faces, clothing, chair positions, wood furniture, material colors, object scale relationships, lighting and relative arrangement. Remove everything outside the cluster. Produce a sharp high-resolution image, ideally 1536 x 1536 pixels, centered with tight transparent padding and every complete object safely inside the canvas.\nBackground must be genuinely transparent with an alpha channel. NO colored rug, NO floor tile, NO solid ground/platform/base, NO windows/walls/environment, NO other teams, NO labels, NO dashboard controls/UI, NO text, NO watermark. Retain only the specified people, their desks, chairs, bookcase/cabinet and directly associated small props/plants. Keep monitor displays as abstract unobtrusive screen content without readable text. Do not redesign the cluster or change the perspective.\nTarget: the THREE-person Operations cluster in the BOTTOM ROW, THIRD zone from the LEFT, originally on the LAVENDER/PURPLE rug around x=1030,y=670. Include exactly the purple-shirt man at the back facing front and the two seated workers at the near-left/near-right corners wearing gray/lavender and purple, their three-way wooden desks/central dividers with monitors, three wheeled chairs, directly associated small desk props and plants, and the white bookcase/cabinet with books and plants behind the cluster. Preserve this exact three-person arrangement. Remove the lavender rug and all surrounding environment."
+    },
+    {
+      "id": "quality",
+      "people": 6,
+      "path": "/Users/hungpham/Documents/Product-Cycle/product_cycle/web/assets/office/departments/quality.png",
+      "original_path": "/Users/hungpham/.codex/generated_images/01a10728-5cc4-7b01-819c-20a13e9a5253/exec-511fd10e-a76f-4f07-b8e0-172346fb1f2f.png",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "true_alpha_verified": true,
+      "viewed": true,
+      "transparent_pixels": 900047,
+      "opaque_pixels": 1564,
+      "content_bbox": [
+        0,
+        21,
+        1238,
+        1212
+      ],
+      "head_centers_normalized": [
+        [
+          0.218,
+          0.317
+        ],
+        [
+          0.486,
+          0.34
+        ],
+        [
+          0.8,
+          0.325
+        ],
+        [
+          0.223,
+          0.543
+        ],
+        [
+          0.49,
+          0.539
+        ],
+        [
+          0.775,
+          0.551
+        ]
+      ],
+      "head_centers_note": "Approximate visual estimates for overlay alignment, ordered left/right (data), rear/front-left/front-right (operations), far-left/far-center/far-right/near-left/near-center/near-right (quality).",
+      "prompt": "Use case: background-extraction. Asset type: crisp transparent PNG component for a software-company office scene.\nInput image: the attached local source is the edit target. Extract only the specified departmental furniture-and-people cluster. Preserve its exact elevated orthographic/isometric camera, soft polished 2.5D illustrated rendering, faces, clothing, chair positions, wood furniture, material colors, object scale relationships, lighting and relative arrangement. Remove everything outside the cluster. Produce a sharp high-resolution image, ideally 1536 x 1536 pixels, centered with tight transparent padding and every complete object safely inside the canvas.\nBackground must be genuinely transparent with an alpha channel. NO colored rug, NO floor tile, NO solid ground/platform/base, NO windows/walls/environment, NO other teams, NO labels, NO dashboard controls/UI, NO text, NO watermark. Retain only the specified people, their desks, chairs, bookcase/cabinet and directly associated small props/plants. Keep monitor displays as abstract unobtrusive screen content without readable text. Do not redesign the cluster or change the perspective.\nTarget: the SIX-person Quality & Security cluster in the BOTTOM RIGHT zone, originally on the GREEN rug around x=1470,y=660. Include exactly six workers: three far-side seated people facing front (teal-shirt man, long-haired light-shirt woman, pale-green-shirt man) and three near-side workers seen from behind, their long two-sided wooden workstation with monitors/dividers, all six office chairs, directly associated desk mugs/books/small plants, and the white bookcase/cabinet and potted plants directly behind this cluster. Preserve exact two-row arrangement and character identities. Remove the green rug and all surrounding office floor/windows/railings and unrelated decor."
+    }
+  ]
+}

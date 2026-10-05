@@ -2,44 +2,86 @@
 function setView(next, scroll=true) {
   view=next;
   document.body.dataset.view=next;
-  const pages={overview:['Tổng quan phát triển','Theo dõi tiến độ, kế hoạch và bằng chứng của sản phẩm.'],plan:['Kế hoạch phát triển','Từng đầu việc, điều kiện hoàn tất và các phụ thuộc cần xử lý.'],workflow:['Quy trình và công việc','Từ giai đoạn lớn đến công việc và từng bước thực hiện.'],documents:['Tài liệu & bằng chứng','Đọc đặc tả, thiết kế và đầu ra thực tế ngay trong không gian làm việc.'],services:['Dịch vụ & nền tảng','Theo dõi chuẩn bị dự án và cấu hình đã xác định trong thiết kế.'],screens:['Màn hình & luồng','Xem trước thiết kế, đường chuyển và đối chiếu với giao diện thật.'],history:['Nhật ký phát triển','Các mốc thực hiện, kiểm chứng và quyết định trong quá trình phát triển.']};
+  const pages={office:['Open Studio','Văn phòng làm việc của đội ngũ.'],overview:['Tổng quan phát triển','Theo dõi tiến độ, kế hoạch và bằng chứng của sản phẩm.'],plan:['Kế hoạch phát triển','Từng đầu việc, điều kiện hoàn tất và các phụ thuộc cần xử lý.'],workflow:['Quy trình và công việc','Từ giai đoạn lớn đến công việc và từng bước thực hiện.'],documents:['Tài liệu & bằng chứng','Đọc đặc tả, thiết kế và đầu ra thực tế ngay trong không gian làm việc.'],services:['Dịch vụ & nền tảng','Theo dõi chuẩn bị dự án và cấu hình đã xác định trong thiết kế.'],screens:['Màn hình & luồng','Xem trước thiết kế, đường chuyển và đối chiếu với giao diện thật.'],history:['Nhật ký phát triển','Các mốc thực hiện, kiểm chứng và quyết định trong quá trình phát triển.']};
   $('#view-title').textContent=pages[next][0];
   $('#view-description').textContent=pages[next][1];
   document.querySelectorAll('.nav-link').forEach(button=>{const active=button.dataset.view===next;button.classList.toggle('active',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current')});
   requestAnimationFrame(()=>{if(next==='workflow'&&workflowDiagram&&!workflowDiagram.initialized)workflowDiagram.focus();if(next==='screens'&&screenDiagram&&!screenDiagram.initialized)screenDiagram.focus()});
+  if(next==='office')requestAnimationFrame(()=>officeFitIfNeeded());
   if(scroll)window.scrollTo({top:0,behavior:'smooth'});
 }
 
 function evidenceRecords() {
-  return state.tasks.filter(task=>task.status!=='superseded').flatMap(task=>task.evidence.map(record=>({...record,taskTitle:task.title,stage:task.stage,current:record.revision===task.revision,taskStatus:task.status})));
+  return state.tasks.filter(task=>task.status!=='superseded').flatMap(task=>{
+    const attempts=task.attempt_history.filter(attempt=>attempt.revision===task.revision);
+    const latest=attempts.filter(attempt=>attempt.phase==='work'&&attempt.status==='completed').at(-1);
+    const currentPrefix=latest?.id.replace(/:work$/,':');
+    const currentIds=new Set([task.design_baseline?.reference_evidence,...(task.design_baseline?.screens||[]).flatMap(screen=>[...screen.references,...screen.assets].map(item=>item.evidence_id))]);
+    return task.evidence.map(record=>({...record,taskTitle:task.title,stage:task.stage,
+      current:record.revision===task.revision&&(!latest||record.attempt_id?.startsWith(currentPrefix)||currentIds.has(record.id)),
+      attemptNumber:attempts.find(attempt=>attempt.id===record.attempt_id)?.number,taskStatus:task.status}));
+  });
 }
 function evidenceKind(record) {
   const source=record.source.toLowerCase();
   if(/\.(png|jpe?g|webp)$/.test(source))return 'Hình ảnh';
-  if(/\.html?$/.test(source))return 'Mô hình giao diện';
+  if(/\.html?$/.test(source))return 'Mẫu giao diện';
   if(/\.json$/.test(source))return 'Tài liệu có cấu trúc';
   if(/\.md$/.test(source))return 'Tài liệu';
   if(/\.pdf$/.test(source))return 'Tài liệu PDF';
   if(record.kind==='check')return 'Kết quả kiểm tra';
-  return 'Đầu ra';
+  return 'Đầu ra khác';
+}
+function evidenceTitle(record) {
+  const design=state.tasks.find(task=>task.id==='design'),file=record.source.split('/').at(-1);
+  for(const screen of design?.design_baseline?.screens||[]){
+    const ref=screen.references.find(item=>item.evidence_id===record.id||(/\.html?$/i.test(file)&&design.evidence.find(e=>e.id===item.evidence_id)?.source.split('/').at(-1).startsWith(file.replace(/\.html?$/i,'')+'-'+item.viewport.width+'.')));
+    if(ref)return screen.name+' · '+(screen.states.find(item=>item.id===ref.state)?.name||'Ảnh thiết kế');
+    const asset=screen.assets.find(item=>item.evidence_id===record.id);if(asset)return asset.name;
+  }
+  const names={'analysis.md':'Phân tích sản phẩm','requirements.json':'Yêu cầu và tiêu chí sản phẩm','product-direction.json':'Hướng sản phẩm','design.md':'Đặc tả màn hình và tương tác','design-baseline.json':'Bộ quy tắc thiết kế','plan.json':'Kế hoạch phát triển','architecture.md':'Thiết kế kỹ thuật','result.json':'Báo cáo kết quả','index.html':'Bộ mẫu giao diện'};
+  if(names[file])return names[file];
+  if(/\.(png|jpe?g|webp)$/i.test(file))return record.description.replace(/\s*\/\s*\{[^}]*\}/g,'').replace(/\s*\/\s*[\w-]+$/,'')||'Ảnh thiết kế';
+  if(/\.html?$/i.test(file))return 'Mẫu giao diện · '+record.taskTitle;
+  if(/\.(py|js|log)$/i.test(file))return 'Tệp hỗ trợ · '+record.taskTitle;
+  return record.description||'Bằng chứng đã ghi nhận';
+}
+function currentTaskRecords(task){return evidenceRecords().filter(record=>record.task_id===task.id&&record.current)}
+function reviewTask(id){
+  if(id==='design'&&state.tasks.find(task=>task.id===id)?.design_baseline?.screens?.length){setScreenMode('review');setView('screens');return}
+  evidenceFilter=state.tasks.find(task=>task.id===id)?.stage||'all';$('#evidence-scope').value='current';$('#evidence-search').value='';$('#evidence-type').value='all';renderDocuments();setView('documents');
 }
 function documentCard(record, title) {
   const isImage=/\.(png|jpe?g|webp)$/i.test(record.source);
-  return '<button class="document-card" data-evidence="'+escape(record.id)+'"><span class="doc-kind">'+escape(evidenceKind(record))+'</span><strong>'+escape(title||record.description)+'</strong>'+(isImage?'<img loading="lazy" src="/evidence/'+encodeURIComponent(record.id)+'" alt="'+escape(record.description)+'">':title?'<div class="doc-excerpt">'+escape(record.description)+'</div>':'')+'<p>'+escape(phases[record.stage])+' · Phiên bản '+record.revision+(record.current?' · Hiện tại':' · Lần trước')+'</p><span class="muted">Mở để xem</span></button>';
+  return '<button class="document-card" data-evidence="'+escape(record.id)+'"><span class="doc-kind">'+escape(evidenceKind(record))+'</span><strong>'+escape(title||evidenceTitle(record))+'</strong>'+(isImage?'<img loading="lazy" src="/evidence/'+encodeURIComponent(record.id)+'" alt="'+escape(evidenceTitle(record))+'">':'')+'<p>'+escape(phases[record.stage])+' · Phiên bản '+record.revision+(record.attemptNumber?' · Lần '+record.attemptNumber:'')+'</p><span class="muted">'+(record.current?'Bộ đầu ra hiện tại':'Lịch sử')+' · Mở để xem</span></button>';
 }
 let lastDocumentKey=null;
 function renderDocuments() {
-  const records=evidenceRecords();
-  const key=JSON.stringify([evidenceFilter,records.map(record=>[record.id,record.sha256,record.current]),state.stages.map(stage=>stage.id)]);
-  if(key===lastDocumentKey)return;
-  lastDocumentKey=key;
-  const picks=['analysis','design','plan'].map(stage=>stage==='design'?(records.find(e=>e.stage===stage&&e.current&&/\.(png|jpe?g|webp)$/i.test(e.source))||records.find(e=>e.stage===stage&&e.current&&/\.html$/i.test(e.source))):records.find(e=>e.stage===stage&&e.current&&e.kind==='artifact'&&e.source.endsWith(stage==='analysis'?'requirements.json':'plan.json'))).filter(Boolean);
-  const titles={analysis:'Yêu cầu sản phẩm',design:'Thiết kế UX/UI',plan:'Kế hoạch triển khai'};
+  const records=evidenceRecords(),scope=$('#evidence-scope').value,type=$('#evidence-type').value,query=$('#evidence-search').value.trim().toLocaleLowerCase('vi');
+  const key=JSON.stringify([evidenceFilter,scope,type,query,records.map(record=>[record.id,record.sha256,record.current]),state.stages.map(stage=>stage.id)]);
+  if(key===lastDocumentKey)return;lastDocumentKey=key;
+  const picks=['analysis','design','plan'].map(stage=>records.find(e=>e.stage===stage&&e.current&&e.source.endsWith(stage==='analysis'?'requirements.json':stage==='design'?'design.md':'plan.json'))).filter(Boolean);
+  const titles={analysis:'Yêu cầu sản phẩm',design:'Đặc tả và bộ thiết kế',plan:'Kế hoạch triển khai'};
   $('#document-summary').innerHTML=picks.map(e=>documentCard(e,titles[e.stage])).join('')||'<p class="muted">Tài liệu sẽ xuất hiện khi các giai đoạn có đầu ra.</p>';
-  $('#evidence-filter').innerHTML='<option value="all">Tất cả giai đoạn</option>'+state.stages.map(s=>'<option value="'+escape(s.id)+'">'+escape(s.title)+'</option>').join('');
-  $('#evidence-filter').value=evidenceFilter;
-  const visible=records.filter(record=>evidenceFilter==='all'||record.stage===evidenceFilter).sort((a,b)=>Number(b.current)-Number(a.current));
-  $('#document-library').innerHTML=visible.map(e=>documentCard(e)).join('')||'<p class="muted">Chưa có bằng chứng ở giai đoạn này.</p>';
+  $('#evidence-filter').innerHTML='<option value="all">Tất cả giai đoạn</option>'+state.stages.map(s=>'<option value="'+escape(s.id)+'">'+escape(s.title)+'</option>').join('');$('#evidence-filter').value=evidenceFilter;
+  const visible=records.filter(record=>{
+    const category=/\.(png|jpe?g|webp)$/i.test(record.source)?'image':/\.html?$/i.test(record.source)?'prototype':/\.(json|md|pdf)$/i.test(record.source)?'document':'other';
+    return (evidenceFilter==='all'||record.stage===evidenceFilter)&&(scope==='all'||record.current===(scope==='current'))&&(type==='all'||category===type)&&(!query||(evidenceTitle(record)+' '+record.taskTitle).toLocaleLowerCase('vi').includes(query));
+  });
+  const rank=record=>/\.(md|json)$/i.test(record.source)?0:/\.(png|jpe?g|webp)$/i.test(record.source)?1:2;
+  visible.sort((a,b)=>Number(b.current)-Number(a.current)||rank(a)-rank(b));
+  $('#evidence-count').textContent=visible.length+' đầu ra · '+(scope==='current'?'Đang xem bộ hiện tại':scope==='history'?'Đang xem lịch sử':'Bao gồm các lần thực hiện trước');
+  $('#document-library').innerHTML=visible.map(e=>documentCard(e)).join('')||'<p class="muted">Không có đầu ra phù hợp. Thử đổi từ khóa hoặc bộ lọc.</p>';
+}
+function imageEvidenceGroup(current,records=evidenceRecords()){
+  const images=records.filter(record=>record.task_id===current.task_id&&record.current===current.current&&/\.(png|jpe?g|webp)$/i.test(record.source));
+  const order=state.tasks.find(task=>task.id===current.task_id)?.design_baseline?.screens?.flatMap(screen=>screen.references.map(ref=>ref.evidence_id))||[];
+  if(current.current)images.sort((a,b)=>(order.includes(a.id)?order.indexOf(a.id):order.length)-(order.includes(b.id)?order.indexOf(b.id):order.length));
+  return images;
+}
+function moveEvidence(direction){
+  const records=evidenceRecords(),current=records.find(record=>record.id===openedEvidence);if(!current)return;
+  const images=imageEvidenceGroup(current,records),index=images.findIndex(record=>record.id===openedEvidence),next=images[index+direction];if(next)openEvidence(next.id);
 }
 
 const readerLabels={product:'Sản phẩm',name:'Tên',title:'Tên',summary:'Tóm tắt',description:'Mô tả',requirements:'Yêu cầu sản phẩm',acceptance:'Tiêu chí nghiệm thu',criteria:'Điều kiện hoàn tất',scope:'Phạm vi',out_of_scope:'Ngoài phạm vi',non_goals:'Phần để sau',assumptions:'Giả định',risks:'Rủi ro',questions:'Câu hỏi cần làm rõ',open_questions:'Câu hỏi còn mở',users:'Người sử dụng',target_users:'Người sử dụng',goals:'Mục tiêu',flows:'Luồng sử dụng',states:'Trạng thái',rules:'Quy tắc thiết kế',reference:'Mốc tham khảo',reference_type:'Loại mốc tham khảo',reference_source:'Nguồn tham khảo',reference_evidence:'Bằng chứng tham khảo',approved:'Đã duyệt',owner_approval:'Quyết định của chủ sản phẩm',tasks:'Danh sách công việc',instructions:'Phạm vi thực hiện',deps:'Phụ thuộc',dependencies:'Phụ thuộc',checks:'Cách kiểm tra',services:'Dịch vụ',provider:'Nhà cung cấp',purpose:'Mục đích',inputs:'Đầu vào cần cấp',verification:'Cách kiểm chứng',delivery:'Bàn giao',access:'Cách sử dụng',limitations:'Hạn chế',findings:'Nhận xét',steps:'Các bước thực hiện',status:'Trạng thái',evidence:'Bằng chứng liên quan',notes:'Ghi chú',note:'Ghi chú',reason:'Lý do',id:'Mã tham chiếu',version:'Phiên bản',source:'Nguồn',decision:'Quyết định',rationale:'Cơ sở lựa chọn',components:'Các thành phần',data:'Dữ liệu',model:'Model',effort:'Mức suy luận',architecture:'Thiết kế kỹ thuật',technology:'Công nghệ',stack:'Công nghệ',environment:'Môi trường',owner:'Người phụ trách',cost:'Chi phí',typography:'Kiểu chữ',colors:'Màu sắc',spacing:'Khoảng cách',responsive:'Bố cục thích ứng',motion:'Chuyển động',input:'Cách điều khiển',feedback:'Phản hồi',accessibility:'Khả năng tiếp cận',content:'Nội dung',final_browser_checks:'Kiểm chứng trải nghiệm cuối cùng',browser_checks:'Kiểm chứng trải nghiệm',local:'Bản local',limits:'Giới hạn thực thi',recommendations:'Đề xuất',evaluation:'Đánh giá',success_criteria:'Điều kiện thành công'};
@@ -107,7 +149,12 @@ async function openEvidence(id) {
   const request=++viewerRequest;
   openedEvidence=id;
   const modal=$('#evidence-viewer');
-  $('#evidence-title').textContent=record?.description||'Bằng chứng không còn trong danh sách hiện tại';
+  $('#evidence-title').textContent=record?evidenceTitle(record):'Bằng chứng không còn trong danh sách hiện tại';
+  const isImage=record&&/\.(png|jpe?g|webp)$/i.test(record.source);
+  const imageGroup=record?imageEvidenceGroup(record):[];
+  const imageIndex=imageGroup.findIndex(item=>item.id===id);
+  $('#previous-evidence').hidden=!isImage;$('#next-evidence').hidden=!isImage;$('#previous-evidence').disabled=imageIndex<=0;$('#next-evidence').disabled=imageIndex<0||imageIndex===imageGroup.length-1;
+  $('#evidence-zoom').hidden=!isImage;$('#evidence-zoom').textContent='Kích thước gốc';$('#evidence-content').classList.remove('image-full');
   $('#evidence-kind').textContent=record?record.taskTitle+' · '+evidenceKind(record)+' · Phiên bản '+record.revision:'Đọc bằng chứng';
   const original=$('#evidence-original');original.hidden=!record;if(record)original.href='/evidence/'+encodeURIComponent(id);
   $('#evidence-content').innerHTML='<p class="muted">Đang mở tài liệu…</p>';
@@ -122,7 +169,7 @@ async function openEvidence(id) {
     if(request!==viewerRequest)return;
     const source=record.source.toLowerCase(),text=new TextDecoder().decode(data);
     let content;
-    if(/\.(png|jpe?g|webp)$/.test(source))content='<img src="/evidence/'+encodeURIComponent(id)+'" alt="'+escape(record.description)+'">';
+    if(/\.(png|jpe?g|webp)$/.test(source))content='<img src="/evidence/'+encodeURIComponent(id)+'" alt="'+escape(evidenceTitle(record))+'">';
     else if(/\.json$/.test(source))content=structuredContent(JSON.parse(text));
     else if(/\.md$/.test(source))content=markdownContent(text,record);
     else if(/\.html?$/.test(source))content='<p class="muted">Mô hình chạy trong khung xem riêng. Đây là thiết kế tham khảo, chưa phải sản phẩm đã nghiệm thu.</p><iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="Mô hình giao diện" srcdoc="'+escape(previewDocument(text))+'"></iframe>';

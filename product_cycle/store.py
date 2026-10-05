@@ -82,9 +82,12 @@ class Store:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA foreign_keys=ON")
+        from .team import migrate
+        migrate(self.db)
 
     @classmethod
-    def create(cls, project, brief, name, model=None, effort=None, mode="live"):
+    def create(cls, project, brief, name, model=None, effort=None, mode="live", team=False,
+               team_concurrency=3, team_game_designer=False):
         project = Path(project).expanduser().resolve()
         project.mkdir(parents=True, exist_ok=True)
         root = state_root(project)
@@ -156,6 +159,9 @@ class Store:
         store.event(None, "cycle.created", {"name": name, "mode": mode, "workflow_version": config["workflow_version"]})
         if preparation:
             store.event(None, "project.prepared", preparation)
+        if team:
+            from .team import configure
+            configure(store, True, team_concurrency, team_game_designer, new_cycle=True)
         return store
 
     def close(self):
@@ -613,7 +619,8 @@ class Store:
 
     def owner_gate(self, task):
         return (task["stage"] == "design" and self.config.get("screen_design_required", False) or
-                task["stage"] in self.config["gates"] or task["id"] in self.config.get("task_gates", []))
+                task["stage"] in self.config["gates"] or task["id"] in self.config.get("task_gates", []) and
+                not (self.config.get("team", {}).get("enabled") and self.config["team"].get("autonomous_checkpoint")))
 
     def owner_input(self, tid, actor, note):
         task = self.task(tid)
@@ -926,7 +933,8 @@ class Store:
         readiness = {task["id"]: self.sealed_document(task["id"], "readiness.json")
                      for task in tasks if task["stage"] == "setup" and task["result"] and task["status"] != "superseded"}
         cycle_state = self.db.execute("SELECT value FROM meta WHERE key='state'").fetchone()[0]
-        return {"config": config, "project": str(self.project),
+        from .team import TeamStore
+        return {"config": config, "project": str(self.project), "team": TeamStore(self).snapshot(),
                 "foundation": self.foundation(),
                 "state": cycle_state,
                 "tasks": tasks, "stages": stage_progress(tasks, config), "events": events,

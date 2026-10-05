@@ -52,13 +52,26 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 400)
 
     def test_dashboard_assets_have_browser_content_types(self):
-        for route, content_type in [("/dashboard.css", "text/css"), ("/evidence-reader.js", "text/javascript"), ("/workflow-canvas.js", "text/javascript"), ("/screens-view.js", "text/javascript")]:
+        for route, content_type in [("/dashboard.css", "text/css"), ("/office.css", "text/css"), ("/office-view.js", "text/javascript"), ("/evidence-reader.js", "text/javascript"), ("/workflow-canvas.js", "text/javascript"), ("/screens-view.js", "text/javascript")]:
             with self.subTest(route=route), urlopen(self.url + route, timeout=5) as response:
                 self.assertEqual(response.headers.get_content_type(), content_type)
                 self.assertGreater(len(response.read()), 0)
         with self.assertRaises(HTTPError) as caught:
             urlopen(self.url + "/web/../store.py", timeout=5)
         self.assertEqual(caught.exception.code, 404)
+
+    def test_additive_team_state_cursor_api_and_safe_assets(self):
+        self.assertFalse(self.state["team"]["enabled"])
+        for route in ("/api/team", "/api/team/events?after=0&limit=1", "/api/team/messages?after=0&limit=1"):
+            with urlopen(self.url + route, timeout=5) as response:
+                data = json.load(response)
+            self.assertIn("enabled" if route == "/api/team" else "cursor", data)
+        for route in ("/api/team/events?after=-1", "/api/team/messages?limit=bad", "/assets/%2e%2e/store.py", "/assets/office/%2e%2e/%2e%2e/dashboard.html"):
+            with self.subTest(route=route), self.assertRaises(HTTPError) as caught:
+                urlopen(self.url + route, timeout=5)
+            self.assertIn(caught.exception.code, (400, 404))
+        with urlopen(self.url + "/assets/office/coordinator.png", timeout=5) as response:
+            self.assertEqual(response.headers.get_content_type(), "image/png")
 
     def test_post_requires_control_token(self):
         request = Request(self.url + "/api/pause", data=b"{}", headers={"Content-Type": "application/json"})

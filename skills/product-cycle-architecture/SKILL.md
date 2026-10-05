@@ -26,3 +26,7 @@ For controller-backed work, read [stage contracts](../product-cycle/references/c
 New local cycles use policy.service_setup_required: architecture identifies necessary services and user inputs without configuring them; plan links each increment to its required services and defines local delivery; handoff presents the verified local product. Configuration tasks run after design and plan review. VPS and external release are deferred. Respect configured owner gates.
 
 For cycles with project_setup_required, produce project-setup.json describing the selected stack, structure, coding rules, tooling, common components, environment names and actual foundation checks. The controller creates a preparatory task inside Development, before feature tasks.
+
+## Khi sản phẩm là game
+
+If the brief or accepted direction asks for a game, read [Game Design](../product-cycle-game-design/SKILL.md) as a companion to this stage. Use its architecture guidance to map accepted gameplay rules to rendering, input/state/time ownership, assets and supported device constraints without choosing a new game concept. Keep accepted scope, configured owner gates and evidence boundaries; the companion is not a new stage or an execution command.

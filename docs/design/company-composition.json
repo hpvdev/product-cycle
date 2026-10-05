@@ -1,0 +1,273 @@
+{
+  "source_reference": "docs/design/agent-company-final.png",
+  "world_width": 3600,
+  "world_height": 1800,
+  "note": "Individual regenerated team art placed with aspect ratio preserved. Head coordinates measured visually in intrinsic image space; native seats and portrait crops derive from the same transforms. Original seat map remains reference geometry.",
+  "departments": [
+    {
+      "id": "management",
+      "width": 1254,
+      "height": 1254,
+      "left": 321,
+      "top": 361.79999999999995,
+      "renderWidth": 750,
+      "heads": {
+        "coordinator": [
+          354,
+          375
+        ],
+        "plan_reviewer": [
+          974,
+          492
+        ]
+      },
+      "image": "/assets/office/departments/management.png"
+    },
+    {
+      "id": "product",
+      "width": 1254,
+      "height": 1254,
+      "left": 1408.6000000000001,
+      "top": 311.79999999999995,
+      "renderWidth": 850,
+      "heads": {
+        "product_manager": [
+          385,
+          390
+        ],
+        "analysis": [
+          916,
+          411
+        ],
+        "analysis_reviewer": [
+          725,
+          737
+        ]
+      },
+      "image": "/assets/office/departments/product.png"
+    },
+    {
+      "id": "design",
+      "width": 1254,
+      "height": 1254,
+      "left": 2526,
+      "top": 286.79999999999995,
+      "renderWidth": 900,
+      "heads": {
+        "ux_researcher": [
+          420,
+          340
+        ],
+        "design": [
+          880,
+          380
+        ],
+        "design_system": [
+          350,
+          660
+        ],
+        "design_reviewer": [
+          950,
+          700
+        ]
+      },
+      "image": "/assets/office/departments/design.png"
+    },
+    {
+      "id": "engineering",
+      "width": 1536,
+      "height": 1024,
+      "left": 3554,
+      "top": 370.13333333333327,
+      "renderWidth": 1100,
+      "heads": {
+        "architecture": [
+          191,
+          151
+        ],
+        "build": [
+          575,
+          152
+        ],
+        "frontend": [
+          960,
+          148
+        ],
+        "backend": [
+          1344,
+          150
+        ],
+        "mobile": [
+          191,
+          621
+        ],
+        "performance": [
+          576,
+          621
+        ],
+        "architecture_reviewer": [
+          961,
+          621
+        ],
+        "build_reviewer": [
+          1346,
+          621
+        ]
+      },
+      "image": "/assets/office/departments/engineering-spaced.png"
+    },
+    {
+      "id": "game",
+      "width": 1254,
+      "height": 1254,
+      "left": 202.80000000000007,
+      "top": 1251.6,
+      "renderWidth": 900,
+      "heads": {
+        "game_designer": [
+          350,
+          400
+        ],
+        "game_engineer": [
+          935,
+          430
+        ],
+        "technical_artist": [
+          555,
+          690
+        ]
+      },
+      "image": "/assets/office/departments/game.png"
+    },
+    {
+      "id": "data_ai",
+      "width": 1254,
+      "height": 1254,
+      "left": 1425,
+      "top": 1326.6,
+      "renderWidth": 750,
+      "heads": {
+        "data_engineer": [
+          344,
+          495
+        ],
+        "ai_engineer": [
+          938,
+          549
+        ]
+      },
+      "image": "/assets/office/departments/data_ai.png"
+    },
+    {
+      "id": "operations",
+      "width": 1254,
+      "height": 1254,
+      "left": 2575,
+      "top": 1276.6,
+      "renderWidth": 850,
+      "heads": {
+        "devops": [
+          612,
+          296
+        ],
+        "technical_writer": [
+          347,
+          646
+        ],
+        "release_engineer": [
+          897,
+          647
+        ]
+      },
+      "image": "/assets/office/departments/operations.png"
+    },
+    {
+      "id": "quality",
+      "width": 1254,
+      "height": 1254,
+      "left": 3628,
+      "top": 1201.6,
+      "renderWidth": 1000,
+      "heads": {
+        "verify": [
+          273,
+          397
+        ],
+        "test_automation": [
+          609,
+          426
+        ],
+        "accessibility": [
+          1003,
+          408
+        ],
+        "verify_reviewer": [
+          279,
+          681
+        ],
+        "review": [
+          614,
+          676
+        ],
+        "security": [
+          972,
+          691
+        ]
+      },
+      "image": "/assets/office/departments/quality.png"
+    }
+  ],
+  "environment": "/assets/office/company-wide-base.png",
+  "amenities": [
+    {
+      "id": "lounge",
+      "image": "/assets/office/departments/lounge.png",
+      "width": 1254,
+      "height": 1254,
+      "left": 1334.4966114994363,
+      "top": 1094.2179192784665,
+      "renderWidth": 369.4176,
+      "visible_bounds": [
+        22,
+        178,
+        1216,
+        1047
+      ]
+    },
+    {
+      "id": "pantry",
+      "image": "/assets/office/departments/pantry.png",
+      "width": 1254,
+      "height": 1254,
+      "left": 2925.7347310033824,
+      "top": 1110.6582935738443,
+      "renderWidth": 357.2656,
+      "visible_bounds": [
+        21,
+        276,
+        1235,
+        978
+      ]
+    },
+    {
+      "id": "meeting",
+      "image": "/assets/office/departments/meeting.png",
+      "width": 1254,
+      "height": 1254,
+      "left": 2198.783290191657,
+      "top": 1176.0153082299887,
+      "renderWidth": 223.55360000000002,
+      "visible_bounds": [
+        67,
+        80,
+        1188,
+        1157
+      ]
+    }
+  ],
+  "room_scale": 2.705749718151071,
+  "renderer": "Native image positions in a4800x2400 room. Separate engineering desks; nearby full titles. Only unplaceable edge labels are omitted, without hiding other employees. Selection does not move the camera.",
+  "background_reference": "product_cycle/web/assets/office/company-wide-base.png",
+  "width": 4800,
+  "height": 2400
+}

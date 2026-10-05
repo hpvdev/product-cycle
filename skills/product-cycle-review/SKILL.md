@@ -26,3 +26,7 @@ Do not equate honest limitations with sufficient discovery. If intended use, des
 ## Reviewing screen specifications
 
 For UI design, read [screen specification guidance](../product-cycle-design/references/screen-spec.md). Inspect design.md's shared rules and per-screen actions alongside requirements and the actual visual references. Check that primary controls have clear preconditions, processing, state/data effects, feedback, destinations and observable acceptance; applicable recovery and responsive behavior must be usable, not checklist filler. Return specific rework for omissions or contradictions rather than approving an image-only output. Do not demand implementation/API internals at design or retrospectively apply new requirements to sealed historical work without an authorized reopening. For architecture/plan/build, assess traceability to the relevant spec sections and assigned scope; product behavior and actual visual fidelity require separate evidence.
+
+## Khi sản phẩm là game
+
+If the brief or accepted direction asks for a game, read [Game Design](../product-cycle-game-design/SKILL.md) as a companion to this stage. Use its independent-review guidance as an additional game-design perspective within the assigned criteria. Assess the concept, rules and evidence appropriate to this stage; do not demand finished gameplay at design or claim fun from an image. Keep accepted scope, configured owner gates and evidence boundaries; the companion is not a new stage or an execution command.

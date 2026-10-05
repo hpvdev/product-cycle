@@ -51,7 +51,7 @@ For UI build work and final verify, register screen-comparisons.json and the act
 }
 ```
 
-Use matched only after actual comparison; needs_changes records outstanding drift and requires result.blocker until repaired. A blocked task may retain partial comparisons or report the missing tool without a comparison report. A complete task cannot omit assigned targets, use another reference version, reuse the reference as a fake capture or claim a pass against stale source. Compute source_fingerprint using product_cycle.store.fingerprint after product changes; controller files are excluded. Final verify recaptures all targets for the final product version; earlier increments alone do not prove the final UI.
+The only allowed status values are matched and needs_changes. Use matched only after actual comparison; keep minor differences in observations. needs_changes records outstanding material drift and requires result.blocker until repaired. Do not invent another status or mark an unverified comparison matched to pass validation. A blocked task may retain partial comparisons or report the missing tool without a comparison report. A complete task cannot omit assigned targets, use another reference version, reuse the reference as a fake capture or claim a pass against stale source. Compute source_fingerprint using product_cycle.store.fingerprint after product changes; controller files are excluded. Final verify recaptures all targets for the final product version; earlier increments alone do not prove the final UI.
 
 ## Independent review
 

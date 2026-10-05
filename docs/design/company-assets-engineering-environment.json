@@ -1,0 +1,19 @@
+{
+  "tool": "built-in image_gen",
+  "records": [
+    {
+      "component": "engineering",
+      "prompt": "Use case: background-extraction. Asset: HIGH RESOLUTION TRANSPARENT workstation group sprite. Extract ONLY the TOP RIGHT blue ENGINEERING team from supplied office reference. EXACTLY EIGHT employees, two rows of four, with their pale wood shared workstation desks, eight slate chairs, monitors, keyboards, desk props and small desk plants. Preserve EXACT identities (upper row blue-shirt man, white-blouse black-hair woman, plaid-shirt curly ginger man, dark-blue-shirt brown-skin man; lower row four seated mostly back-facing employees), arrangement, pale wood materials, lighting and near-overhead 2.5D camera. Complete all desks/chairs fully inside frame. Re-render this isolated engineering group cleanly at high resolution 2048x1536-style rather than enlarging blurry source pixels. TIGHT bounding box with only 3 percent clean transparent margin, subject fills canvas. TRUE ALPHA transparent outside all objects, also gaps between desks/chairs, no colored rug, floor, room, walls, background shadow rectangle, otherteams, text, badge, label, status, connector, appUI. Keep soft small contact shadows on furniture only. Faithfully preserve arrangement for overlay at same baseline location.",
+      "output_hint": "Generated images are saved to /Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5 as /Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-9ed55c9a-f184-4fe5-803b-1ee8f4b67c04.png by default.\nIf you need to use a generated image at another path, copy it and leave the original in place unless the user explicitly asks you to delete it.\nThe generated image is already displayed to the user. There is no need to render it in the final response as a Markdown image or file link.",
+      "source": "docs/design/agent-company-final.png",
+      "asset": "product_cycle/web/assets/office/departments/engineering.png"
+    },
+    {
+      "component": "environment",
+      "prompt": "Use case: precise-object-edit / background-extraction. Asset: EMPTY OFFICE ENVIRONMENT layer for compositing independent workstation sprites. Use supplied image as exact baseline. Remove ALL 31 employees and ALL EIGHT team workstation clusters: their desks, chairs, monitors, small bookshelves/panels and desk plants. Preserve the EIGHT colored floor rugs in EXACT original position and size; preserve walls, windows, floor tile patterns, walking paths, perimeter plants, glass doorway, outer edges and EXACT CAMERA/perspective/landscape 2:1 dimensions. Preserve sofa tea lounge left center, round meeting table center, pantry coffee/tea bar with beer fridge right center. Empty clean rugs ready to place transparent workstation sprite layers. No humans remain, no desk/chair components remain inside any team rug. Do not change scale, don't move the amenities. Premium calm soft 2.5D illustration at highest available resolution, 3840x1920-style. NO letters/text/labels/UI. This is exact same room with eight cleared team islands.",
+      "output_hint": "Generated images are saved to /Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5 as /Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-13c595cd-e6ee-4761-8427-2cbf64f957b7.png by default.\nIf you need to use a generated image at another path, copy it and leave the original in place unless the user explicitly asks you to delete it.\nThe generated image is already displayed to the user. There is no need to render it in the final response as a Markdown image or file link.",
+      "source": "docs/design/agent-company-final.png",
+      "asset": "product_cycle/web/assets/office/company-environment.png"
+    }
+  ]
+}

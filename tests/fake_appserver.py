@@ -34,6 +34,9 @@ for line in sys.stdin:
             emit({"id": 99, "method": "item/tool/requestUserInput", "params": {"threadId": "fixture-thread", "questions": []}})
             continue
         emit({"id": mid, "result": {"turn": {"id": "fixture-turn", "status": "inProgress"}}})
+        if mode == "dynamic":
+            emit({"id": 99, "method": "item/tool/call", "params": {"threadId": "fixture-thread", "turnId": "fixture-turn", "callId": "fixture-call", "tool": "team_context", "arguments": {}}})
+            continue
         if mode == "timeout":
             continue
         emit({"method": "thread/tokenUsage/updated", "params": {"threadId": "fixture-thread", "turnId": "fixture-turn", "tokenUsage": {"total": {"totalTokens": 30}}}})
@@ -43,3 +46,6 @@ for line in sys.stdin:
         if mode == "capacity":
             turn["error"] = {"message": "Selected model is at capacity", "codexErrorInfo": "serverOverloaded"}
         emit({"method": "turn/completed", "params": {"threadId": "fixture-thread", "turn": turn}})
+    elif mode == "dynamic" and mid == 99 and "result" in message:
+        emit({"method": "item/completed", "params": {"threadId": "fixture-thread", "turnId": "fixture-turn", "item": {"type": "agentMessage", "id": "answer", "text": json.dumps({"tool_response": message["result"]})}}})
+        emit({"method": "turn/completed", "params": {"threadId": "fixture-thread", "turn": {"id": "fixture-turn", "status": "completed"}}})

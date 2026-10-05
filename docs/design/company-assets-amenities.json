@@ -1,0 +1,24 @@
+{
+  "tool": "built-in image_gen",
+  "source": "docs/design/agent-company-final.png",
+  "records": [
+    {
+      "key": "lounge",
+      "asset": "product_cycle/web/assets/office/departments/lounge.png",
+      "prompt": "Use case: background-extraction. Extract ONLY the central LEFT tea lounge from supplied reference: cream curved sofa, two sage lounge armchairs, low oval coffee table with teapot/cups/book, cream oval rug, tall floorlamp, potted plant. Empty nopeople. Preserve original exactnear-overhead2.5D camera, appearance, relativearrangement. Isolated highresolution1536square clean furniture detail, subject fillscanvas with3percent safetransparentmargin. TRUE ALPHA around furniture and rug, no officefloor/window/walls/otherdesks/otherteams, no text/UI. Completealllegs andlamp.",
+      "output_hint": "Generated images are saved to /Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5 as /Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-d8e2cf58-7426-4912-8ff8-a8b8b22a8a0d.png by default.\nIf you need to use a generated image at another path, copy it and leave the original in place unless the user explicitly asks you to delete it.\nThe generated image is already displayed to the user. There is no need to render it in the final response as a Markdown image or file link."
+    },
+    {
+      "key": "pantry",
+      "asset": "product_cycle/web/assets/office/departments/pantry.png",
+      "prompt": "Use case: background-extraction. Extract ONLY the central RIGHT pale wood drinks pantry from suppliedoffice reference: wood cabinet/counter with black coffee machine, tea kettle, cups, amber beer bottles in glassdoor minifridge, THREE sage barstools, smallplants, pale rug. Preserve exactnear-overhead2.5D camera, relativearrangement, style. Re-render clean crisp details highresolution1536square, subjectfillscanvas,3percent safemargin. TRUE ALPHA outside objects andrug. Empty nopeople, no otherteams/officefloor/window/walls/text/UI. Fullyvisiblecompletechairs/counter/plants.",
+      "output_hint": "Generated images are saved to /Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5 as /Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-69d3804d-64bf-4293-81ce-31c3c7843c8e.png by default.\nIf you need to use a generated image at another path, copy it and leave the original in place unless the user explicitly asks you to delete it.\nThe generated image is already displayed to the user. There is no need to render it in the final response as a Markdown image or file link."
+    },
+    {
+      "key": "meeting",
+      "asset": "product_cycle/web/assets/office/departments/meeting.png",
+      "prompt": "Use case: background-extraction. Extract ONLY the central round meeting table with smallpottedplant and FOUR blue chairs from suppliedoffice reference. Completeallchairlegs. Preserve exactnear-overhead2.5D camera, pale wood table, shape, originalarrangement, lighting. Re-render clean crisp highresolution1024square sprite with3percent safetransparentmargin, subjectfillscanvas. TRUE ALPHA outsidefurniture, nopeople, noofficefloor/rug/background/otherteams/walls/UI/text.",
+      "output_hint": "Generated images are saved to /Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5 as /Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-47843ab3-483d-4e52-bcee-e71d1fc90b09.png by default.\nIf you need to use a generated image at another path, copy it and leave the original in place unless the user explicitly asks you to delete it.\nThe generated image is already displayed to the user. There is no need to render it in the final response as a Markdown image or file link."
+    }
+  ]
+}

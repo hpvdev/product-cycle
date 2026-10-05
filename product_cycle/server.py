@@ -8,7 +8,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs, unquote
 
 from .contracts import WorkflowError, require
 from .store import Store, runner_lock
@@ -30,6 +30,9 @@ def serve(project, port=8787):
             try:
                 if store.config["mode"] != "live" or store.snapshot()["state"] != "active":
                     continue
+                from .team import enabled
+                if enabled(store):
+                    continue  # Only an explicitly started supervisor may advance team work.
                 with runner_lock(store):
                     if desktop.enabled(store):
                         desktop.sync_usage(store)
@@ -90,14 +93,33 @@ def serve(project, port=8787):
                 return self.reply(200, (Path(__file__).parent / "web" / "dashboard.css").read_bytes(), "text/css; charset=utf-8")
             if route == "/evidence-reader.js":
                 return self.reply(200, (Path(__file__).parent / "web" / "evidence-reader.js").read_bytes(), "text/javascript; charset=utf-8")
-            if route in {"/workflow-canvas.js", "/screens-view.js"}:
+            if route in {"/workflow-canvas.js", "/screens-view.js", "/office-view.js"}:
                 return self.reply(200, (Path(__file__).parent / "web" / route[1:]).read_bytes(), "text/javascript; charset=utf-8")
+            if route == "/office.css":
+                return self.reply(200, (Path(__file__).parent / "web" / "office.css").read_bytes(), "text/css; charset=utf-8")
+            if route.startswith("/assets/"):
+                assets = (Path(__file__).parent / "web" / "assets").resolve()
+                path = (Path(__file__).parent / "web" / unquote(route).lstrip("/")).resolve()
+                if not path.is_relative_to(assets) or not path.is_file() or path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp", ".svg"}:
+                    return self.reply(404, {"error": "Không tìm thấy hình ảnh."})
+                return self.reply(200, path.read_bytes(), mimetypes.guess_type(str(path))[0] or "application/octet-stream")
             store = Store(project)
             try:
                 if route == "/api/state":
                     state = store.snapshot()
                     state["control_token"] = token
                     return self.reply(200, state)
+                if route == "/api/team":
+                    from .team import TeamStore
+                    return self.reply(200, TeamStore(store).snapshot())
+                if route in {"/api/team/events", "/api/team/messages"}:
+                    from .team import TeamStore
+                    query = parse_qs(urlparse(self.path).query)
+                    try:
+                        after, limit = int(query.get("after", ["0"])[0]), int(query.get("limit", ["100"])[0])
+                    except ValueError:
+                        raise WorkflowError("Mốc đọc lịch sử chưa hợp lệ.")
+                    return self.reply(200, TeamStore(store).page("team_events" if route.endswith("events") else "team_messages", after, limit))
                 if route.startswith("/evidence/"):
                     eid = route.rsplit("/", 1)[-1]
                     row = store.db.execute("SELECT * FROM evidence WHERE id=?", (eid,)).fetchone()

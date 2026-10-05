@@ -1,0 +1,322 @@
+{
+  "width": 1774,
+  "height": 887,
+  "image": "/assets/office/company-floor.png",
+  "seats": [
+    {
+      "id": "coordinator",
+      "label": "PM",
+      "x": 176,
+      "y": 221,
+      "zone": "management"
+    },
+    {
+      "id": "plan_reviewer",
+      "label": "Review kế hoạch",
+      "x": 295,
+      "y": 257,
+      "zone": "management"
+    },
+    {
+      "id": "product_manager",
+      "label": "Product",
+      "x": 565,
+      "y": 224,
+      "zone": "product"
+    },
+    {
+      "id": "analysis",
+      "label": "BA",
+      "x": 690,
+      "y": 226,
+      "zone": "product"
+    },
+    {
+      "id": "analysis_reviewer",
+      "label": "BA Review",
+      "x": 641,
+      "y": 298,
+      "zone": "product"
+    },
+    {
+      "id": "ux_researcher",
+      "label": "UX Research",
+      "x": 965,
+      "y": 212,
+      "zone": "design"
+    },
+    {
+      "id": "design",
+      "label": "UI/UX",
+      "x": 1075,
+      "y": 224,
+      "zone": "design"
+    },
+    {
+      "id": "design_system",
+      "label": "Design System",
+      "x": 948,
+      "y": 299,
+      "zone": "design"
+    },
+    {
+      "id": "design_reviewer",
+      "label": "UX Review",
+      "x": 1080,
+      "y": 306,
+      "zone": "design"
+    },
+    {
+      "id": "architecture",
+      "label": "Tech Lead",
+      "x": 1330,
+      "y": 206,
+      "zone": "engineering"
+    },
+    {
+      "id": "build",
+      "label": "Full-stack",
+      "x": 1410,
+      "y": 208,
+      "zone": "engineering"
+    },
+    {
+      "id": "frontend",
+      "label": "Web",
+      "x": 1490,
+      "y": 204,
+      "zone": "engineering"
+    },
+    {
+      "id": "backend",
+      "label": "Server",
+      "x": 1570,
+      "y": 208,
+      "zone": "engineering"
+    },
+    {
+      "id": "mobile",
+      "label": "Mobile",
+      "x": 1340,
+      "y": 306,
+      "zone": "engineering"
+    },
+    {
+      "id": "performance",
+      "label": "Performance",
+      "x": 1420,
+      "y": 302,
+      "zone": "engineering"
+    },
+    {
+      "id": "architecture_reviewer",
+      "label": "Arch Review",
+      "x": 1500,
+      "y": 304,
+      "zone": "engineering"
+    },
+    {
+      "id": "build_reviewer",
+      "label": "Code Review",
+      "x": 1580,
+      "y": 306,
+      "zone": "engineering"
+    },
+    {
+      "id": "game_designer",
+      "label": "Game Design",
+      "x": 130,
+      "y": 608,
+      "zone": "game"
+    },
+    {
+      "id": "game_engineer",
+      "label": "Game DEV",
+      "x": 287,
+      "y": 609,
+      "zone": "game"
+    },
+    {
+      "id": "technical_artist",
+      "label": "Technical Art",
+      "x": 190,
+      "y": 689,
+      "zone": "game"
+    },
+    {
+      "id": "data_engineer",
+      "label": "Data",
+      "x": 550,
+      "y": 633,
+      "zone": "data_ai"
+    },
+    {
+      "id": "ai_engineer",
+      "label": "AI",
+      "x": 693,
+      "y": 645,
+      "zone": "data_ai"
+    },
+    {
+      "id": "devops",
+      "label": "DevOps / SRE",
+      "x": 1031,
+      "y": 600,
+      "zone": "operations"
+    },
+    {
+      "id": "technical_writer",
+      "label": "Tài liệu",
+      "x": 976,
+      "y": 689,
+      "zone": "operations"
+    },
+    {
+      "id": "release_engineer",
+      "label": "Release",
+      "x": 1101,
+      "y": 690,
+      "zone": "operations"
+    },
+    {
+      "id": "verify",
+      "label": "QC",
+      "x": 1370,
+      "y": 610,
+      "zone": "quality"
+    },
+    {
+      "id": "test_automation",
+      "label": "QA Auto",
+      "x": 1460,
+      "y": 611,
+      "zone": "quality"
+    },
+    {
+      "id": "accessibility",
+      "label": "Accessibility",
+      "x": 1570,
+      "y": 610,
+      "zone": "quality"
+    },
+    {
+      "id": "verify_reviewer",
+      "label": "QC Review",
+      "x": 1385,
+      "y": 696,
+      "zone": "quality"
+    },
+    {
+      "id": "review",
+      "label": "QA Lead",
+      "x": 1475,
+      "y": 689,
+      "zone": "quality"
+    },
+    {
+      "id": "security",
+      "label": "Security",
+      "x": 1576,
+      "y": 690,
+      "zone": "quality"
+    }
+  ],
+  "zones": [
+    {
+      "id": "management",
+      "label": "Điều phối",
+      "x": 230,
+      "y": 130,
+      "bounds": {
+        "x": 120,
+        "y": 175,
+        "width": 250,
+        "height": 230
+      }
+    },
+    {
+      "id": "product",
+      "label": "Sản phẩm",
+      "x": 630,
+      "y": 130,
+      "bounds": {
+        "x": 500,
+        "y": 175,
+        "width": 280,
+        "height": 240
+      }
+    },
+    {
+      "id": "design",
+      "label": "Thiết kế",
+      "x": 1020,
+      "y": 130,
+      "bounds": {
+        "x": 895,
+        "y": 175,
+        "width": 270,
+        "height": 240
+      }
+    },
+    {
+      "id": "engineering",
+      "label": "Kỹ thuật",
+      "x": 1460,
+      "y": 130,
+      "bounds": {
+        "x": 1280,
+        "y": 175,
+        "width": 360,
+        "height": 240
+      }
+    },
+    {
+      "id": "game",
+      "label": "Game Studio",
+      "x": 220,
+      "y": 520,
+      "bounds": {
+        "x": 80,
+        "y": 560,
+        "width": 290,
+        "height": 240
+      }
+    },
+    {
+      "id": "data_ai",
+      "label": "Dữ liệu & AI",
+      "x": 625,
+      "y": 520,
+      "bounds": {
+        "x": 490,
+        "y": 570,
+        "width": 280,
+        "height": 230
+      }
+    },
+    {
+      "id": "operations",
+      "label": "Vận hành",
+      "x": 1040,
+      "y": 540,
+      "bounds": {
+        "x": 920,
+        "y": 575,
+        "width": 250,
+        "height": 220
+      }
+    },
+    {
+      "id": "quality",
+      "label": "Chất lượng & Bảo mật",
+      "x": 1470,
+      "y": 520,
+      "bounds": {
+        "x": 1320,
+        "y": 570,
+        "width": 340,
+        "height": 230
+      }
+    }
+  ]
+}

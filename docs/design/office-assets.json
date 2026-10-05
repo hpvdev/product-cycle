@@ -1,0 +1,97 @@
+[
+  {
+    "role": "environment",
+    "prompt": "Edit the attached approved Product Cycle Open Studio screenshot into ONE reusable asset: ONLY the empty isometric office environment, genuinely transparent PNG background outside the architectural floor footprint. Use case background-extraction / ui asset. Preserve the exact approved art direction, camera angle, soft daylight, pale white-blue floor tiles, window walls, glass meeting-room wall, shelving, plants and central communal wood meeting table/chairs and bottom-left sofa/lounge. REMOVE all seven individual employee workstations (individual desks, monitors, task chairs and their people) completely, leaving clean continuous floor space in their former positions so separate workstation assets can be placed later. Preserve shared communal furniture only. REMOVE every person, every name tag, speech bubble, dotted line, logo, wall text, navigation, header, drawer, zoom UI, icons, footer and all text. Reconstruct clean surfaces where these overlays were. This is NOT a dashboard screenshot, not a mockup, not a sprite sheet. Isolate just the complete coherent office architectural environment, with as much reference composition as possible and no cut-off objects; do not invent additional rooms or change to a different style. Keep the isometric front and back orientation unchanged, allow generous safe space around footprint. Transparent means real alpha not checkerboard artwork or white backdrop. Production-quality polished 2.5D illustration matching the reference, no characters, no employee desks, no text, no border.",
+    "reference": "docs/design/agent-office-open-studio.png",
+    "original": "/Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-e9cc946f-564f-4614-a553-f5f8046d8c57.png",
+    "file": "product_cycle/web/assets/office/environment.png",
+    "generator": "OpenAI Image Gen",
+    "transparent_background": true,
+    "inspection": "Generated preview inspected; complete workstation/environment reconstructed, alpha metadata verified separately. No pixel edits. Verified genuine alpha channel; colors remain untouched.",
+    "dimensions": [
+      1487,
+      1058
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "role": "coordinator",
+    "prompt": "Edit the attached approved office reference to extract ONLY the coordinator employee workstation at the bottom center/front: man Nam with short black side-parted hair, light blue button-up shirt, seated at laptop, slate chair, his light wood desk, open dark laptop, mug, small potted plant and notebook. All these form ONE complete coherent workstation cutout with genuinely transparent background. Preserve exact approved person identity, proportions, soft 2.5D illustrated shading, cool daylight, pale wood/slate palette and the same isometric angle and orientation of that bottom-front desk (view from front and slightly right, no rotation). Full body as visible sitting, complete desk/chair/legs/casters, no clipped props. Modest transparent padding, object fills about 80 percent. Remove ALL architecture/floor, glass walls, other people, labels, logos, blue lines, bubbles, app shell, UI or text; reconstruct clean geometry where objects were occluded by labels/glass. No rectangular backdrop or white fill, no checkerboard drawn, true alpha. Isolate this exact cluster without reinventing it. This is a production game-style asset to composite into the original office, not a new UI mockup. Include only gentle local contact shadow, no huge floor plane.",
+    "reference": "docs/design/agent-office-open-studio.png",
+    "original": "/Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-71110ff1-c36d-4283-8e69-dbc52b126a98.png",
+    "file": "product_cycle/web/assets/office/coordinator.png",
+    "generator": "OpenAI Image Gen",
+    "transparent_background": true,
+    "inspection": "Generated preview inspected; complete workstation/environment reconstructed, alpha metadata verified separately. No pixel edits. Verified genuine alpha channel; colors remain untouched.",
+    "dimensions": [
+      1374,
+      1145
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      255
+    ]
+  },
+  {
+    "role": "build",
+    "prompt": "Extract and reconstruct ONE reusable workstation cutout from the attached approved Open Studio dashboard reference. Subject ONLY the royal-blue-shirt male developer in the middle-left, seen from behind and left, seated at his pale wood rectangular desk with TWO monitors, keyboard/mouse and slate-gray task chair. Preserve reference soft high-quality editorial 2.5D isometric illustration, exact camera direction and color palette, natural anatomy and equipment scale. Include the complete person, desk legs, chair and equipment, with generous modest padding, isolated on true transparent alpha background. No surrounding floor, walls, other people, UI, labels, text, arrows, logos, meeting table or office backdrop. Not a screenshot crop: reconstruct clean isolated cluster with only a soft local contact shadow. Do not change perspective or invent decorative elements.",
+    "reference": "docs/design/agent-office-open-studio.png",
+    "original": "/Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-fa9f4443-3bf9-4f7a-a64d-8462a345ecb7.png",
+    "file": "product_cycle/web/assets/office/build.png",
+    "generator": "OpenAI Image Gen",
+    "transparent_background": true,
+    "inspection": "Generated preview inspected; complete workstation/environment reconstructed, alpha metadata verified separately. No pixel edits. Verified genuine alpha channel; colors remain untouched.",
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      254
+    ]
+  },
+  {
+    "role": "verify",
+    "prompt": "Create ONE clean isolated workstation asset by extracting/reconstructing the middle-right QA woman from the attached approved office image. She wears a muted purple cardigan/top, has black hair tied in a bun and glasses, seated at her pale wood desk with two monitors and slate chair. Preserve the original viewing angle, orientation and understated soft editorial 2.5D isometric illustration style; NOT photorealistic, no extra gloss or dramatic lighting. Complete person, desk, all legs, chair and equipment visible as in original; reasonable padding. True transparent alpha outside workstation including under/between desk legs. Only soft contact shadow within silhouette, no large ambient glow. No office floor/walls/other persons/UI/captions/labels/logos/connection lines. Keep art at same perspective and scale as approved reference.",
+    "reference": "docs/design/agent-office-open-studio.png",
+    "original": "/Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-da3b9fac-d0a4-46b3-8426-77a7d6d53082.png",
+    "file": "product_cycle/web/assets/office/verify.png",
+    "generator": "OpenAI Image Gen",
+    "transparent_background": true,
+    "inspection": "Generated preview inspected; complete workstation/environment reconstructed, alpha metadata verified separately. No pixel edits. Verified genuine alpha channel; colors remain untouched.",
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      254
+    ]
+  },
+  {
+    "role": "review",
+    "prompt": "Extract and reconstruct ONLY the independent reviewer workstation on the far right of approved reference. Male dark navy sweater, short black hair and glasses/headset, seated at pale wood desk with two monitors and slategray taskchair. Preserve reference soft editorial2.5D isometric drawing style, understated daylight, exact orientation and camera; no photoreal shine. Complete isolated person/desk/chair/equipment with legs visible and modest padding. true transparent alpha everywhere outside cluster, under/between desk legs; no surrounding office floor, architectural wall, other persons, UI, labels, text, logos, arrows or furniture. Only minimal localized contactshadow no broad light glow. It will be layered alongside other extracted office workstations.",
+    "reference": "docs/design/agent-office-open-studio.png",
+    "original": "/Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-b9a0b9dd-a215-4605-8946-84d14d25cb06.png",
+    "file": "product_cycle/web/assets/office/review.png",
+    "generator": "OpenAI Image Gen",
+    "transparent_background": true,
+    "inspection": "Generated preview inspected; complete workstation/environment reconstructed, alpha metadata verified separately. No pixel edits. Verified genuine alpha channel; colors remain untouched.",
+    "dimensions": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA",
+    "alpha_extrema": [
+      0,
+      254
+    ]
+  }
+]

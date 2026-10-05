@@ -32,3 +32,9 @@ Before requesting final scope approval, summarize what is confirmed, proposed, u
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
 
 Interview the owner in Codex and preserve actual feedback through owner-input when supported. Produce the collaborative product direction contract when required. Review evaluates whether the proposed analysis is ready for an informed owner decision; owner approval precedes downstream work.
+
+In product-direction.json, open_questions lists unanswered product choices, not the formal approval gate. Close a choice only from an explicit answer or recorded owner delegation, with truthful provenance; an empty list does not grant gate approval. A delegated AI decision is not direct human feedback. Keep remaining tuning and research hypotheses in analysis.md with their evaluation or deferment.
+
+## Khi sản phẩm là game
+
+If the brief or accepted direction asks for a game, read [Game Design](../product-cycle-game-design/SKILL.md) as a companion to this stage. Use its concept and analysis guidance to establish player agency, world consequences, the core loop and chosen appeal before freezing features. Keep accepted scope, configured owner gates and evidence boundaries; the companion is not a new stage or an execution command.

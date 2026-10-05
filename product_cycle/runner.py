@@ -160,6 +160,8 @@ def run_checks(store, task, aid, directory):
 
 
 def execute(store, tid, client_factory=CodexClient):
+    from .team import enabled
+    require(not enabled(store), "Chế độ nhóm thực thi qua supervise; không mở phiên riêng cho cùng công việc.")
     task = store.task(tid)
     require(store.config["mode"] == "live", "Dữ liệu minh họa không chạy Codex; khởi tạo dự án live riêng.")
     if desktop.enabled(store):
@@ -199,11 +201,10 @@ def browser_ready(store, task):
     return covered >= store.requirement_ids()
 
 
-def finish_work(store, tid, aid, directory, client_factory):
-    task = store.task(tid)
+def ensure_checks(store, task, aid, directory):
     # Reuse successful checks only while their source version is unchanged.
     from .contracts import json_object
-    records = store.current_evidence(tid)
+    records = store.current_evidence(task["id"])
     store.intact(records)
     checks = [json_object(store.root / item["object_path"]) for item in records if item["kind"] == "check"]
     current = fingerprint(store.project)
@@ -211,6 +212,11 @@ def finish_work(store, tid, aid, directory, client_factory):
                    report.get("source_fingerprint") == current for report in checks)
            for command in store.check_commands(task)):
         run_checks(store, task, aid, directory)
+
+
+def finish_work(store, tid, aid, directory, client_factory):
+    task = store.task(tid)
+    ensure_checks(store, task, aid, directory)
     store.update(tid, fingerprint=fingerprint(store.project), status="reviewing", reason=None)
     require(browser_ready(store, store.task(tid)),
             "Còn thiếu bằng chứng nghiệm thu trình duyệt cho phiên bản hiện tại. Kết quả làm tiếp trong Codex có thể được đồng bộ; các tiêu chí còn thiếu vẫn cần kiểm chứng.")
@@ -219,6 +225,7 @@ def finish_work(store, tid, aid, directory, client_factory):
 
 def sync_task(store, tid, client_factory=CodexClient):
     """Read a recorded chat; import work products, never convert prose into approval."""
+    require(not store.config.get("team", {}).get("enabled"), "Dùng recover hoặc điều phối nhóm để đối chiếu các phiên nhóm.")
     task = store.task(tid)
     require(task["status"] in {"blocked", "running", "reviewing"}, "Công việc này không cần khôi phục kết quả.")
     row = store.db.execute("SELECT * FROM attempts WHERE task_id=? AND revision=? AND number=? ORDER BY rowid DESC LIMIT 1",
@@ -326,6 +333,7 @@ def sync_task(store, tid, client_factory=CodexClient):
 
 
 def continue_task(store, tid, client_factory=CodexClient):
+    require(not store.config.get("team", {}).get("enabled"), "Dùng supervise để tiếp tục các phiên nhóm.")
     require(store.snapshot()["state"] == "active", "Quy trình đang tạm dừng. Bỏ tạm dừng trước khi tiếp tục công việc.")
     if desktop.enabled(store):
         attempt = desktop.latest(store, tid)
@@ -478,6 +486,8 @@ def run_phase(store, task, aid, directory, review, client_factory, thread_id=Non
 
 
 def review_task(store, tid, client_factory=CodexClient):
+    from .team import enabled
+    require(not enabled(store), "Review nhóm dùng phiên độc lập do supervise tạo.")
     store.validate_foundation()
     if desktop.enabled(store):
         return desktop.prepare(store, tid, review=True)
@@ -494,6 +504,8 @@ def review_task(store, tid, client_factory=CodexClient):
 
 
 def run_cycle(store, max_tasks=50, client_factory=CodexClient, continue_blocked=False):
+    from .team import enabled
+    require(not enabled(store), "Chế độ nhóm chạy bằng supervise; lệnh run giữ cơ chế cũ.")
     with runner_lock(store):
         if desktop.enabled(store):
             if continue_blocked:

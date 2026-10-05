@@ -42,7 +42,22 @@ python3 -m product_cycle run --project /absolute/product
 
 `run` ở chế độ Codex App chuẩn bị công việc, không tự gọi model. Chat Codex đang hoạt động dùng skill product-cycle để nhận công việc, trao đổi với bạn và gửi kết quả về controller. Xem [vòng thực thi native](skills/product-cycle/references/operating-guide.md#native-codex-loop). Chọn `init --executor codex-app-server` nếu muốn chạy bằng App Server riêng.
 
-`init` tự chuẩn bị Git nếu chưa có, bổ sung `.gitignore`, tạo `AGENTS.md`/`PRODUCT_CYCLE_RULES.md` và cài 14 skill theo project, gồm Frontend App Builder từ repo OpenAI hiện hành và skill làm lại quy trình `product-cycle-reset`. Giữ nguyên Git, hướng dẫn và skill đã có; không tự commit/push. Thiết kế kỹ thuật tạo `project-setup.json`; công việc chuẩn bị bên trong Phát triển tạo coding rules theo stack, cấu trúc code, môi trường, công cụ kiểm tra và phần dùng chung trước mọi task chức năng. State và bằng chứng đã chốt nằm ở `~/.local/share/product-cycle`, ngoài vùng AI được ghi. `PRODUCT_CYCLE_HOME` đổi nơi lưu; giữ nguyên trong một cycle. `PRODUCT_CYCLE_CODEX` chọn binary nếu Codex không nằm trong PATH.
+## Đội ngũ tự động và văn phòng
+
+Chọn chế độ đội ngũ khi tạo dự án để bộ điều phối chạy nền qua Codex App Server:
+
+```sh
+python3 -m product_cycle init --project /absolute/product --brief /absolute/brief.md --name "Tên sản phẩm" --team
+python3 -m product_cycle serve --project /absolute/product --port 8788
+# Chạy trong terminal khác, giữ process hoạt động:
+python3 -m product_cycle supervise --project /absolute/product
+```
+
+Dashboard mở ở màn hình văn phòng: chọn nhân viên để xem việc được giao, các bước, phiên Codex, mức sử dụng đã ghi nhận, đầu ra và trao đổi. Có thể thu gọn panel, kéo/phóng to văn phòng và lọc lịch sử trao đổi. Nhân vật và đường trao đổi phản ánh bản ghi hoạt động; ảnh minh họa không chứng minh AI đang chạy. Các trang kế hoạch, quy trình và bằng chứng vẫn được giữ.
+
+Supervisor độc lập với dashboard, tự giao việc đủ đầu vào, kiểm tra, mở review độc lập và xử lý sửa lại theo chính sách. Tối đa ba phiên đồng thời, chỉ một phiên được ghi mã nguồn. Dự án team mới giữ mốc chủ sản phẩm chốt hướng, thiết kế và nghiệm thu; cấu hình hiện có không tự bị thay đổi. Máy và supervisor phải hoạt động để tiếp tục khi đóng trình duyệt. `team-status` xem trạng thái, `team-stop` yêu cầu dừng. Xem [cách vận hành đội ngũ](skills/product-cycle/references/team-operation.md). [Nhiệm vụ các vị trí](skills/product-cycle/references/company-roles.md) nối 31 vị trí với các bước của workflow; kỹ sư Web, Server, Mobile và Game có thể nhận task code riêng qua cấu hình. Chế độ này cần được chọn rõ; dự án đang chạy không tự chuyển sang team.
+
+`init` tự chuẩn bị Git nếu chưa có, bổ sung `.gitignore`, tạo `AGENTS.md`/`PRODUCT_CYCLE_RULES.md` và cài 15 skill theo project, gồm Frontend App Builder từ repo OpenAI hiện hành và skill làm lại quy trình `product-cycle-reset`. Giữ nguyên Git, hướng dẫn và skill đã có; không tự commit/push. Thiết kế kỹ thuật tạo `project-setup.json`; công việc chuẩn bị bên trong Phát triển tạo coding rules theo stack, cấu trúc code, môi trường, công cụ kiểm tra và phần dùng chung trước mọi task chức năng. State và bằng chứng đã chốt nằm ở `~/.local/share/product-cycle`, ngoài vùng AI được ghi. `PRODUCT_CYCLE_HOME` đổi nơi lưu; giữ nguyên trong một cycle. `PRODUCT_CYCLE_CODEX` chọn binary nếu Codex không nằm trong PATH.
 
 Dự án mới xác định màn hình, trạng thái và đường chuyển trước khi coding. Mỗi trạng thái trong phạm vi phải có ảnh thiết kế để bạn xem và duyệt; có thể dùng ảnh Image Gen hoặc ảnh chụp prototype, tái sử dụng cùng bộ quy tắc thiết kế. Mỗi task UI gắn với đúng màn hình, trạng thái, kích thước và phiên bản mẫu; khi code phải có ảnh giao diện thật và báo cáo đối chiếu, đồng thời kiểm tra logic theo đặc tả. Frontend App Builder hỗ trợ concept, thi công và đối chiếu ảnh UI thật. Bộ cài giữ phiên bản nguồn được ghi trong [SOURCES](docs/SOURCES.md), không tự tải bản mới mỗi lần chạy. Việc cài skill và qua test controller chưa chứng minh chất lượng thị giác của sản phẩm.
 

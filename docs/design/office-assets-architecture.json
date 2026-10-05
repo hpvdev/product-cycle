@@ -1,0 +1,55 @@
+{
+  "asset_id": "architecture",
+  "filename": "architecture.png",
+  "output_path": "product_cycle/web/assets/office/architecture.png",
+  "source_reference": "docs/design/agent-office-open-studio.png",
+  "source_reference_absolute": "/Users/hungpham/Documents/Product-Cycle/docs/design/agent-office-open-studio.png",
+  "original_image_path": "/Users/hungpham/.codex/generated_images/01a10700-3e86-74e1-bf16-8b69e3e514f4/exec-925e2a91-2645-4ce5-ba5d-ccad4d0abea6.png",
+  "tool": "built-in image_gen",
+  "transparent_background": true,
+  "prompt": "Use case: background-extraction.\nAsset type: one reusable transparent PNG architect workstation cluster for the approved Open Studio office scene.\nInput image: /Users/hungpham/Documents/Product-Cycle/docs/design/agent-office-open-studio.png is the edit target and sole visual reference.\nPrimary request: Faithfully isolate ONLY the upper-right architect workstation: the seated man with short dark hair and black-framed glasses wearing a muted mustard sweater over a light collared shirt, working at his desktop. Include the complete person in the original typing/working pose, full pale warm wood desk with light blue-gray modesty panel and legs, slate office chair, ONE dark monitor seen from behind, keyboard, small architectural scale model/papers on the left of the desktop and the mug at the right belonging to this workstation. Reconstruct hidden lower-body/chair portions naturally so the reusable cluster is complete.\nInvariants: Match the exact approved reference camera and desk orientation; no mirror or rotation. Preserve character identity, proportions, pose, spatial arrangement and original muted mustard/clay/wood/slate palette. Same soft editorial 2.5D isometric illustration, matte simplified surfaces, gentle daylight shading and crisp readable silhouette. Not photorealistic, no polished glossy product-render look. Match the yellow-sweater architect, not neighboring workers.\nComposition: One coherent full workstation centered with modest genuinely transparent padding around all edges. All feet, chair/wheels, desk legs and objects fully inside frame without cropping.\nBackground: genuine transparent alpha outside the objects, including all gaps; retain at most gentle immediate local contact shadow beneath feet/legs. Clean zero alpha around the silhouette and padding; no background haze, floor tile or pedestal.\nRemove entirely: surrounding room, windows, bookshelf, room plants, walls, floor, other workstations or people, UI, arrows, nameplates/status tags, text/logos/watermarks. No extra furniture or monitor. No written text anywhere.",
+  "width": 1328,
+  "height": 1184,
+  "format": "PNG",
+  "mode": "RGBA",
+  "verification": {
+    "alpha_extrema": [
+      0,
+      254
+    ],
+    "fully_transparent_pixels": 967321,
+    "total_pixels": 1572352,
+    "corner_alpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "visible_bounds_alpha_at_least_8": [
+      229,
+      94,
+      1243,
+      1123
+    ],
+    "halo_samples_alpha": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "inspected": true,
+    "original_preserved": true,
+    "original_and_output_identical": true
+  },
+  "fidelity_notes": [
+    "Preserves the upper-right architect's muted mustard sweater, short dark hair/glasses, working pose, single rear-view monitor, pale wood desk and slate chair, and original isometric orientation.",
+    "Soft matte stylized illustration consistent with the selected reference; no photorealistic gloss, floor tile, room, UI, labels, other people or logos.",
+    "Complete reusable cluster with architectural scale model/papers and mug; desk props and occluded lower portions are generated reconstructions.",
+    "Preview RGB contains a broad halo, but eight sampled exterior halo points have alpha 0 in the saved PNG; the RGB halo is transparent when alpha is honored. Some alpha values below 8 extend beyond the visible silhouette. Visible bounds retain padding on all sides.",
+    "Alpha maximum is 254; foreground is nearly opaque rather than exactly 255."
+  ]
+}

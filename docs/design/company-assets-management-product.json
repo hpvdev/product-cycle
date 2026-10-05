@@ -1,0 +1,81 @@
+{
+  "source_reference": "/Users/hungpham/Documents/Product-Cycle/docs/design/agent-company-final.png",
+  "tool": "built-in image_gen.imagegen",
+  "transparent_background": true,
+  "requested_size": "approximately 1536x1536",
+  "generated_originals_preserved": true,
+  "assets": [
+    {
+      "filename": "management.png",
+      "path": "/Users/hungpham/Documents/Product-Cycle/product_cycle/web/assets/office/departments/management.png",
+      "original_image_path": "/Users/hungpham/.codex/generated_images/01a10700-3e86-74e1-bf16-8b69e3e514f4/exec-335d9a1a-b95e-4628-abd1-f6fd140a1466.png",
+      "source_reference": "/Users/hungpham/Documents/Product-Cycle/docs/design/agent-company-final.png",
+      "prompt": "Use case: background-extraction. Input image is the edit target, the approved full company office. Extract ONLY the MANAGEMENT group at the TOP-LEFT on the slate-blue island as ONE complete reusable high-resolution transparent PNG cluster, approximately 1536x1536. Preserve exactly the source identities, poses, clothing, equipment, camera and arrangement: TWO people, black-haired man in navy blazer at upper-left thoughtful hand near face and long brown-haired woman in white blouse at right, seated at connected pale wood desks, slate rolling office chairs, two computers, mugs, books/notebooks, small desk plants, thin clear dividing screen, and their BACK bookcase/storage props with books, plant and framed art. Redraw details cleanly and sharply at the larger resolution while faithfully matching the soft editorial 2.5D isometric source style; same visible desk fronts toward lower-left/lower-right and same relative distances. Remove the blue rug entirely. Remove all tiled floor, room, windows, background and other groups. Real alpha=0 outside the isolated people/desks/chairs/equipment/bookcase cluster and between object gaps. No rug, platform, floor, labels, text, UI, arrows, logos, borders, other people, backdrop or opaque checkerboard. Complete objects uncropped with tight safe transparent padding about 5-8% of canvas. Gentle local object contact shadows only, no wide floor shadow. This is a faithful extraction/edit, not a redesign. Return one transparent image.",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "zero_alpha_pixels": 843350,
+      "alpha_bbox": [
+        53,
+        39,
+        1218,
+        1254
+      ],
+      "visible_bbox_alpha_gt8": [
+        129,
+        82,
+        1188,
+        1188
+      ],
+      "visible_padding_pixels": {
+        "left": 129,
+        "top": 82,
+        "right": 66,
+        "bottom": 66
+      },
+      "inspection": "Two people and complete desks/chairs/rear bookcase are uncropped. Rug/floor/background/UI absent. Sharp high-resolution redraw, not pixel-identical extraction: equipment/bookcase details simplified and expanded; small white/blue fringes and very faint alpha <=8 noise extend beyond the visible cluster. No code cropping, resampling, or alpha editing performed."
+    },
+    {
+      "filename": "product.png",
+      "path": "/Users/hungpham/Documents/Product-Cycle/product_cycle/web/assets/office/departments/product.png",
+      "original_image_path": "/Users/hungpham/.codex/generated_images/01a10700-3e86-74e1-bf16-8b69e3e514f4/exec-89b4eda4-8cad-4d75-98e1-d6fb8c182a55.png",
+      "source_reference": "/Users/hungpham/Documents/Product-Cycle/docs/design/agent-company-final.png",
+      "prompt": "Use case: background-extraction. Input image is the edit target, the approved full company office. Extract ONLY the PRODUCT group at the TOP, SECOND island FROM LEFT, on the sage-green rug as ONE complete reusable high-resolution transparent PNG cluster, approximately 1536x1536. Preserve exactly the source identities, poses, clothing, equipment, camera and arrangement: THREE people around the connected pale wood desk cluster, black-haired man in sage green shirt at upper-left, long black-haired woman in white blouse at upper-right, and curly dark-haired man in muted green sweater seated at lower/front with back partly toward viewer. Preserve all three slate rolling office chairs, desktop monitors and laptops, cups, books/notebooks, small desk plants, thin clear dividing screens, rear low white bookcase with books and plants, and tall sage cabinet. Redraw details cleanly and sharply at larger resolution while faithfully matching the soft editorial 2.5D isometric source style, colors, same desk-facing directions and relative distances. Remove sage rug entirely. Remove tiled floor, room, windows, background and all other groups. Real alpha=0 outside isolated people/desks/chairs/equipment/bookcase/cabinet cluster and between object gaps. No rug, platform, floor, labels, text, UI, arrows, logos, borders, other people, backdrop or opaque checkerboard. Complete objects uncropped with tight safe transparent padding about 5-8% of canvas. Gentle local contact shadows only, no wide floor shadow. This is a faithful extraction/edit, not a redesign. Return one transparent image.",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "mode": "RGBA",
+      "alpha_range": [
+        0,
+        255
+      ],
+      "zero_alpha_pixels": 873497,
+      "alpha_bbox": [
+        138,
+        53,
+        1210,
+        1254
+      ],
+      "visible_bbox_alpha_gt8": [
+        142,
+        121,
+        1113,
+        1157
+      ],
+      "visible_padding_pixels": {
+        "left": 142,
+        "top": 121,
+        "right": 141,
+        "bottom": 97
+      },
+      "inspection": "Three people and complete desks/chairs/rear bookcase/cabinet are uncropped. Rug/floor/background/UI absent. Sharp faithful arrangement, but generated redraw includes eyeglasses on rear-left man and expanded plant/bookcase details; source identity details may drift. Minor white/blue edge fringes and very faint alpha <=8 noise extend beyond visible cluster. No code cropping, resampling, or alpha editing performed."
+    }
+  ]
+}

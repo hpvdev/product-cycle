@@ -1,0 +1,44 @@
+{
+  "asset_id": "design",
+  "filename": "design.png",
+  "output_path": "product_cycle/web/assets/office/design.png",
+  "source_reference": "docs/design/agent-office-open-studio.png",
+  "source_reference_absolute": "/Users/hungpham/Documents/Product-Cycle/docs/design/agent-office-open-studio.png",
+  "original_image_path": "/Users/hungpham/.codex/generated_images/01a10700-3e86-74e1-bf16-8b69e3e514f4/exec-b6af48a5-843e-4514-9008-bd498cce2b4d.png",
+  "tool": "built-in image_gen",
+  "transparent_background": true,
+  "prompt": "Use case: background-extraction.\nAsset type: one reusable transparent PNG designer workstation cluster for the approved Open Studio office scene.\nInput image: /Users/hungpham/Documents/Product-Cycle/docs/design/agent-office-open-studio.png is the edit target and sole visual reference.\nPrimary request: Faithfully isolate ONLY the upper-center UI/UX designer workstation: the seated woman with long dark brown hair wearing a blush pink cardigan/outfit over a pale blouse, working at her desktop drawing/tablet area. Include her complete body and pose, the entire warm light-wood desk, its pale modesty panel and legs, slate blue-gray office chair, ONE large dark monitor seen from the back, keyboard, desk drawing/tablet/notepad equipment, small plants/mug belonging to this desk. Preserve her original thoughtful focused working expression and hands at desk. Reconstruct occluded lower parts naturally so the cluster is complete.\nInvariants: Keep the original isometric camera and desk orientation without mirroring/rotation, original character identity, proportions and arrangement, soft daylight, muted pastel palette, polished softly shaded 3D illustration style, wood/metal/fabric materials. Match THIS pink-clad woman, not the green BA, yellow architect or purple QA.\nComposition: Single coherent cluster centered with modest fully transparent padding around EVERY edge; all desk legs, chair legs/wheels and shoes fully inside frame with no clipping. No scene floor or pedestal.\nBackground: genuine transparent alpha, clean zero alpha outside the cluster and in gaps between objects. At most a gentle short local contact shadow under feet/legs, no broad shadow or barely opaque background haze.\nRemove entirely: floor tiles, walls, windows, room plants, neighboring desks, other people, name/status labels, words/text, arrows, surrounding application UI and watermarks. No added monitors, furniture or decorative base. No written text anywhere.",
+  "width": 1402,
+  "height": 1122,
+  "format": "PNG",
+  "mode": "RGBA",
+  "verification": {
+    "alpha_extrema": [
+      0,
+      255
+    ],
+    "fully_transparent_pixels": 1052173,
+    "total_pixels": 1573044,
+    "corner_alpha": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "visible_bounds_alpha_at_least_8": [
+      261,
+      137,
+      1210,
+      1031
+    ],
+    "inspected": true,
+    "original_preserved": true,
+    "original_and_output_identical": true
+  },
+  "fidelity_notes": [
+    "Preserves the upper-center designer's long dark brown hair, blush pink cardigan and pale blouse, focused seated pose, original desk orientation, soft isometric rendering and rear-view single monitor.",
+    "Complete desk/chair/person/equipment cluster with drawing tablet and stylus, keyboard, notebook, plants and mug; no floor tile, room, other people, labels or UI.",
+    "Generated reconstruction rather than pixel-identical extraction: desk props and occluded lower body/chair parts are reconstructed.",
+    "Some near-transparent alpha values below 8 extend outside the visible silhouette and reach the bottom edge; visible objects retain padding. A local contact shadow remains beneath desk/chair/feet."
+  ]
+}

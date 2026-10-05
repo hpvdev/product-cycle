@@ -23,12 +23,15 @@ def parser():
     init.add_argument("--brief", required=True, help="File mô tả mục tiêu sản phẩm")
     init.add_argument("--name", required=True)
     init.add_argument("--executor", choices=["codex-desktop", "codex-app-server"], default="codex-desktop")
+    init.add_argument("--team", action="store_true", help="Bật nhóm AI do điều phối nền quản lý; chưa tự chạy")
+    init.add_argument("--team-concurrency", type=int, default=3)
+    init.add_argument("--team-game-designer", action="store_true")
     init.add_argument("--model", help="Dùng model này cho mọi bước thay cho cấu hình theo vai trò")
     init.add_argument("--max-turn-tokens", type=int, help="Ngân sách token mỗi phiên; mặc định chỉ theo dõi")
     init.add_argument("--max-cycle-tokens", type=int, help="Ngân sách token toàn quy trình; mặc định chỉ theo dõi")
     init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"],
                       help="Dùng effort này cho mọi bước thay cho cấu hình theo vai trò")
-    for name in ["bootstrap", "install-skills", "update-skills", "uninstall-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress"]:
+    for name in ["bootstrap", "install-skills", "update-skills", "uninstall-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress", "supervise", "team-stop", "team-status"]:
         cmd = sub.add_parser(name)
         cmd.add_argument("--project", required=True)
         if name == "update-skills":
@@ -41,7 +44,13 @@ def parser():
         if name in {"work", "review", "decide", "reopen", "browser-evidence", "judge", "sync", "continue", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress"}:
             cmd.add_argument("--task", required=True)
         if name == "configure":
-            cmd.add_argument("--executor", choices=["codex-desktop", "codex-app-server"], required=True)
+            cmd.add_argument("--executor", choices=["codex-desktop", "codex-app-server"])
+            cmd.add_argument("--team-mode", choices=["on", "off"])
+            cmd.add_argument("--team-concurrency", type=int)
+            cmd.add_argument("--team-game-designer", action="store_true", default=None)
+        if name == "supervise":
+            cmd.add_argument("--once", action="store_true", help="Chạy một nhịp điều phối, chờ các phiên đã mở hoàn tất")
+            cmd.add_argument("--poll-seconds", type=float, default=2)
         if name == "owner-input":
             cmd.add_argument("--actor", required=True)
             cmd.add_argument("--note", required=True)
@@ -173,9 +182,12 @@ def main(argv=None):
         if args.command == "init":
             for value in (args.max_turn_tokens, args.max_cycle_tokens):
                 require(value is None or value > 0, "Ngân sách token phải là số nguyên dương.")
-            store = Store.create(args.project, Path(args.brief).read_text(), args.name, args.model, args.effort)
+            store = Store.create(args.project, Path(args.brief).read_text(), args.name, args.model, args.effort,
+                                 team=args.team, team_concurrency=args.team_concurrency,
+                                 team_game_designer=args.team_game_designer)
             config = store.config
-            config.update(max_turn_tokens=args.max_turn_tokens, max_cycle_tokens=args.max_cycle_tokens, executor=args.executor)
+            config.update(max_turn_tokens=args.max_turn_tokens, max_cycle_tokens=args.max_cycle_tokens,
+                          executor="codex-app-server" if args.team else args.executor)
             write_json(store.root / "config.json", config)
             print("Đã khởi tạo: " + str(store.root))
             return
@@ -184,6 +196,14 @@ def main(argv=None):
         store = Store(args.project)
         if args.command == "status":
             print(json.dumps(store.snapshot(), ensure_ascii=False, indent=2))
+        elif args.command == "supervise":
+            from .team import Supervisor
+            print("Product Cycle: điều phối nhóm đang chạy; dashboard chỉ theo dõi.", flush=True)
+            print(json.dumps(Supervisor(store).run(args.once, args.poll_seconds), ensure_ascii=False, indent=2))
+        elif args.command in {"team-stop", "team-status"}:
+            from .team import stop, TeamStore
+            result = stop(store) if args.command == "team-stop" else TeamStore(store).snapshot()
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         elif args.command == "run":
             outcome = run_cycle(store, args.max_tasks, continue_blocked=args.continue_blocked)
             if outcome:
@@ -200,12 +220,20 @@ def main(argv=None):
                     print(json.dumps(outcome, ensure_ascii=False, indent=2))
         elif args.command == "configure":
             with runner_lock(store):
+                require(args.executor is not None or args.team_mode is not None, "Chọn executor hoặc chế độ nhóm cần cập nhật.")
                 require(not store.db.execute("SELECT id FROM attempts WHERE status IN ('running','queued')").fetchone(),
                         "Kết thúc hoặc khôi phục phiên đang chạy trước khi đổi nơi thực thi.")
-                config = store.config
-                config.update(executor=args.executor, dashboard_read_only=True)
-                write_json(store.root / "config.json", config)
-                store.event(None, "executor.configured", {"executor": args.executor})
+                if args.team_mode is not None:
+                    from .team import configure
+                    require(args.executor in {None, "codex-app-server"} or args.team_mode == "off", "Nhóm AI dùng executor app-server.")
+                    configure(store, args.team_mode == "on", args.team_concurrency, args.team_game_designer)
+                if args.executor is not None:
+                    from .team import enabled
+                    require(not enabled(store) or args.executor == "codex-app-server", "Dừng và tắt nhóm trước khi đổi sang Codex Desktop.")
+                    config = store.config
+                    config.update(executor=args.executor, dashboard_read_only=True)
+                    write_json(store.root / "config.json", config)
+                    store.event(None, "executor.configured", {"executor": args.executor})
             print("Đã cập nhật nơi thực thi. Lịch sử và quyết định trước đây được giữ nguyên.")
         elif args.command == "owner-input":
             with runner_lock(store):
@@ -235,8 +263,16 @@ def main(argv=None):
             store.pause(args.command == "pause")
         elif args.command == "recover":
             with runner_lock(store):
-                print(json.dumps(store.recover()))
+                from .team import enabled, TeamStore, reconcile, supervisor_active
+                if enabled(store):
+                    require(not supervisor_active(store), "Điều phối đang chạy và sẽ tự đối chiếu phiên; không khôi phục song song.")
+                    reconcile(TeamStore(store))
+                    print(json.dumps(TeamStore(store).snapshot(), ensure_ascii=False))
+                else:
+                    print(json.dumps(store.recover()))
         elif args.command in {"sync", "continue"}:
+            from .team import enabled
+            require(not enabled(store), "Phiên nhóm được supervise đối chiếu; không tiếp quản chat bằng sync/continue.")
             require(store.config["mode"] == "live", "Dữ liệu minh họa không có phiên Codex thực tế để khôi phục.")
             with runner_lock(store):
                 action = sync_task if args.command == "sync" else continue_task
@@ -256,7 +292,7 @@ def main(argv=None):
             directory = store.latest_directory(args.task)
             image_id = store.record_file(args.task, str(screenshot.relative_to(store.project)), args.note,
                                          requirements=args.requirements, producer="operator")
-            # This is explicitly a human observation, never an automated pass.
+            # Record the named observer's browser evidence, not a controller-computed pass.
             report = {"actor": args.actor, "url": args.url, "observed_at": now(), "observation": args.note,
                       "screenshot_evidence": image_id, "requirements": args.requirements,
                       "source_fingerprint": fingerprint(store.project), "producer": "operator"}

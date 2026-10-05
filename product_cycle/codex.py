@@ -40,6 +40,9 @@ class CodexClient:
         self.counter = 0
         self.responses = {}
         self.notifications = []
+        self.tool_handler = None
+        self.dynamic_tool_names = set()
+        self.control = None
         self.trace = (directory / "trace.jsonl").open("a", buffering=1)
         self.stderr = (directory / "stderr.log").open("a")
         self.process = subprocess.Popen(command or [binary, "app-server", "--stdio"],
@@ -70,13 +73,33 @@ class CodexClient:
     def receive(self, deadline):
         remaining = deadline - time.monotonic()
         require(remaining > 0, "Phiên AI đã hết thời gian cho phép.")
-        try:
-            message = self.messages.get(timeout=remaining)
-        except queue.Empty as exc:
-            raise WorkflowError("Phiên AI đã hết thời gian cho phép.") from exc
+        while True:
+            if self.control:
+                self.control()
+            try:
+                message = self.messages.get(timeout=min(remaining, .5) if self.control else remaining)
+                break
+            except queue.Empty as exc:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise WorkflowError("Phiên AI đã hết thời gian cho phép.") from exc
         require(message is not None, "Kết nối Codex đã dừng; xem nhật ký phiên để xác định nguyên nhân.")
         self.trace.write(json.dumps(message, ensure_ascii=False) + "\n")
         if "id" in message and "method" in message:
+            if message["method"] == "item/tool/call" and self.tool_handler:
+                params = message.get("params", {})
+                self.on_event(message)
+                try:
+                    require(params.get("tool") in self.dynamic_tool_names and not params.get("namespace"),
+                            "Công cụ điều phối chưa được đăng ký.")
+                    value = self.tool_handler(params)
+                    response = {"success": True, "contentItems": [{"type": "inputText", "text": json.dumps(value, ensure_ascii=False)}]}
+                except WorkflowError as exc:
+                    response = {"success": False, "contentItems": [{"type": "inputText", "text": str(exc)}]}
+                self.process.stdin.write(json.dumps({"id": message["id"], "result": response}) + "\n")
+                self.process.stdin.flush()
+                self.on_event({"method": "client/toolResponse", "params": {"call_id": params.get("callId"), "success": response["success"]}})
+                return message
             # Never silently approve a server request or invent a human answer.
             response = {"id": message["id"], "error": {"code": -32001, "message": "Product Cycle requires operator intervention for this request."}}
             self.process.stdin.write(json.dumps(response) + "\n")
@@ -90,7 +113,7 @@ class CodexClient:
         rid = self.send(method, params)
         while rid not in self.responses:
             message = self.receive(deadline)
-            if "id" in message:
+            if "id" in message and "method" not in message:
                 self.responses[message["id"]] = message
             else:
                 self.notifications.append(message)
@@ -116,12 +139,19 @@ class CodexClient:
         return thread
 
     def run(self, project, prompt, model, effort, schema, readonly=False, network=False,
-            timeout=900, max_tokens=None, thread_id=None, title=None):
+            timeout=900, max_tokens=None, thread_id=None, title=None, dynamic_tools=None,
+            tool_handler=None, writable_roots=None, control=None):
         deadline = time.monotonic() + timeout
+        self.tool_handler = tool_handler
+        self.dynamic_tool_names = {tool["name"] for tool in dynamic_tools or []}
+        self.control = control
         self.initialize(deadline)
         config = {"model_reasoning_effort": effort}
         params = {"cwd": str(project), "model": model, "approvalPolicy": "never",
                   "sandbox": "read-only" if readonly else "workspace-write", "config": config}
+        if dynamic_tools:
+            require(not thread_id, "Công cụ nhóm chỉ đăng ký trong chat mới do điều phối tạo.")
+            params["dynamicTools"] = dynamic_tools
         if thread_id:
             params.update({"threadId": thread_id, "excludeTurns": True})
         started = self.request("thread/resume" if thread_id else "thread/start", params, deadline)
@@ -131,7 +161,11 @@ class CodexClient:
         observed = {"thread_id": thread, "observed_model": started.get("model"),
                     "observed_effort": started.get("reasoningEffort")}
         self.on_event({"method": "client/threadReady", "params": observed})
-        policy = {"type": "readOnly"} if readonly else {"type": "workspaceWrite", "writableRoots": [str(project)], "networkAccess": network}
+        if dynamic_tools:
+            self.on_event({"method": "client/capabilities", "params": {"dynamic_tools": sorted(self.dynamic_tool_names),
+                          "image_generation": "unverified", "computer_use": "unverified"}})
+        policy = {"type": "readOnly"} if readonly else {"type": "workspaceWrite", "writableRoots": [str(p) for p in writable_roots or [project]], "networkAccess": network}
+        self.on_event({"method": "client/turnStarting", "params": {"thread_id": thread}})
         turn = self.request("turn/start", {"threadId": thread, "input": [{"type": "text", "text": prompt}],
                                            "model": model, "effort": effort, "approvalPolicy": "never",
                                            "sandboxPolicy": policy, "outputSchema": schema}, deadline)

@@ -1,0 +1,8 @@
+{
+  "tool": "built-in image_gen",
+  "asset": "product_cycle/web/assets/office/company-base.png",
+  "source": "docs/design/agent-company-final.png",
+  "prompt": "Use case: precise-object-edit. Turn supplied office reference into EMPTY compositing environment. Remove ALL31 people, EIGHT team workstation groups (desks/chairs/monitors/bookcases/plants ondesks), AND all centralamenities (sofa lounge/teatable/rug/lamp, roundmeetingtable/fourchairs, pantry/drinksbar/stools/mini fridge/pantryrug). Keep EXACT outerroom/windows/glasswall/perimeterplants/benches/floor/path geometricpattern and EIGHT colored teamfloor rugs sameposition/size. No room furniture remains exceptperimeter benches/plants and eight rugs. Same1774x887style2:1 camera/scale. Fill removedparts with clean matching floor/path. No text/UI/people. Highestavailable resolution, smooth premiumsoft2.5D environment.",
+  "generated_file": "/Users/hungpham/.codex/generated_images/01a1013b-23b1-78f3-b2cf-74c74b389cc5/exec-db574671-c8f7-483d-b8a1-bf120a74f099.png",
+  "selection": "User requested original palette; warm alternative not selected."
+}

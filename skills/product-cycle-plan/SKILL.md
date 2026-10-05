@@ -28,3 +28,7 @@ For controller-backed work, read [stage contracts](../product-cycle/references/c
 New local cycles use policy.service_setup_required: architecture identifies necessary services and user inputs without configuring them; plan links each increment to its required services and defines local delivery; handoff presents the verified local product. Configuration tasks run after design and plan review. VPS and external release are deferred. Respect configured owner gates.
 
 When policy.screen_design_required is true, read context.screen_design_contract for the assigned stage. Design inventories all screens/states/transitions before creating an owner-approved image bundle. Plan binds increments to specific screen/state/viewport targets. UI build and verify retain actual image-to-render comparisons against that bundle, with functional evidence separate. Never downgrade an approved image to a style hint or silently drop its assets.
+
+## Khi sản phẩm là game
+
+If the brief or accepted direction asks for a game, read [Game Design](../product-cycle-game-design/SKILL.md) as a companion to this stage. Use its planning guidance to make the first core-experience checkpoint a coherent playable loop before dependent expansion, with game-rule/action references and separate behavior, visual and experience observations. Keep accepted scope, configured owner gates and evidence boundaries; the companion is not a new stage or an execution command.
