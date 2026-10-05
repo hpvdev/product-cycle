@@ -1,11 +1,11 @@
 ---
 name: product-cycle-design
-description: Specify screen behavior, shared interaction rules and a concrete visual design baseline for owner review before product implementation.
+description: Specify screen behavior, shared interaction rules and a concrete accepted visual design baseline before product implementation.
 ---
 
 # Thiết kế UX/UI
 
-Preserve an existing design system. For new directions, use Product Design and Image Gen when available; choose a real visual target before coding. Save flows, states, design rules and acceptance criteria in design-baseline.json. A picture is a visual reference; functional and usability acceptance require a running product. The owner approves the baseline before downstream implementation. Record tool gaps instead of fabricating generations.
+Preserve an existing design system. For new directions, use Product Design and Image Gen when available; choose a real visual target before coding. Save flows, states, design rules and acceptance criteria in design-baseline.json. A picture is a visual reference; functional and usability acceptance require a running product. The baseline must be accepted under the selected policy before downstream implementation. Record tool gaps instead of fabricating generations.
 
 When a Product Cycle context packet is supplied, its assigned task, accepted_inputs, work_steps, output schema and artifact_directory are authoritative. Use the specified step IDs in update_plan when available; report only observed progress. Return concrete artifact links and step results. In review mode return evidence-backed step judgments instead.
 
@@ -17,19 +17,21 @@ Read [functional and screen specification](references/screen-spec.md) for UI des
 
 1. Vẽ luồng thao tác: Liên kết hành trình, danh sách màn hình và đường chuyển với yêu cầu đã chốt.
 2. Khảo sát hướng thiết kế: Dùng thiết kế hiện có hoặc tạo phương án bằng Product Design và Image Gen khi công cụ sẵn có.
-3. Đề xuất mốc thiết kế: Lưu hình tham khảo hoặc prototype cụ thể để chủ sản phẩm duyệt.
+3. Đề xuất mốc thiết kế: Lưu hình tham khảo hoặc prototype cụ thể để người có thẩm quyền theo chính sách đã chọn chốt.
 4. Đặc tả màn hình và thao tác: Ghi bố cục, nội dung, điều kiện thao tác, xử lý, thay đổi dữ liệu, phản hồi và chuyển màn; bao phủ các trạng thái cần thiết.
 5. Chốt quy tắc và cách nghiệm thu: Ghi màu, font, khoảng cách, bố cục thích ứng và tiêu chí so sánh.
 
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
 
-Collaborate with the owner in Codex on journeys and concrete visual/prototype alternatives. Iterate on their feedback and await actual approval of the baseline before dependent implementation.
+In supervised mode, collaborate with the owner in Codex on journeys and concrete visual/prototype alternatives, iterate on actual feedback and await the configured baseline approval. Only when team.enabled and team.policy = autonomous, Design Director and Art Director choose and assess the baseline within the human-accepted analysis under delegated company authority. Keep the chosen image, decision rationale and actor traceable in existing outputs; do not record a director decision as human approval. Independent design review, screen coverage and real comparison evidence remain required. Escalate a changed business scope or missing external authorization, not routine visual choices. Read [team operation](../product-cycle/references/team-operation.md) for these boundaries.
+
+If required ImageGen or browser tools are absent in the assigned runtime, use team_request_capability only when that tool is actually exposed, with the exact task and accepted reference. A queued request is not a generated image or captured prototype. Finish independent source work before making the request, then leave source unchanged and return the dependent blocker as Chờ công cụ: ... until the native result is submitted. The authorized native chat uses [company capability worker](../product-cycle-company-worker/SKILL.md); this design worker does not start another chat or replace the requested art with fabricated output.
 
 For new UI or an approved redesign, use the concept guidance in [Frontend App Builder](../frontend-app-builder/SKILL.md) alongside Product Design and Image Gen when available. Design the full core surface, not just its header. Create additional section/state concepts when details or a new layout are unclear; routine screens can reuse a common prototype, but every declared screen/state still needs a viewable image when screen_design_required is enabled. Reuse the chosen visual system for familiar screens, preserving real content and interactions. Record reference coverage, tokens and component variants in the baseline's rules and design.md so coding can reuse them. An approved reference remains the implementation target; later tasks must not silently replace it.
 
 For each screen ID, state and viewport, put exactly one canonical implementation image in screen.references. Keep the selected design image there; register a supplementary prototype capture in result.artifacts and link it from design.md as comparison evidence, rather than adding a duplicate reference. A routine state can use its actual derived capture as its sole reference when it has no separately selected design image. Every declared state still needs coverage.
 
-When policy.screen_design_required is true, read context.screen_design_contract for the assigned stage. Design inventories all screens/states/transitions before creating an owner-approved image bundle. Plan binds increments to specific screen/state/viewport targets. UI build and verify retain actual image-to-render comparisons against that bundle, with functional evidence separate. Never downgrade an approved image to a style hint or silently drop its assets.
+When policy.screen_design_required is true, read context.screen_design_contract for the assigned stage. Design inventories all screens/states/transitions before creating an image bundle accepted under the selected policy. Plan binds increments to specific screen/state/viewport targets. UI build and verify retain actual image-to-render comparisons against that bundle, with functional evidence separate. Never downgrade an approved image to a style hint or silently drop its assets.
 
 ## Khi sản phẩm là game
 

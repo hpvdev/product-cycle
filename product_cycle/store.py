@@ -87,7 +87,7 @@ class Store:
 
     @classmethod
     def create(cls, project, brief, name, model=None, effort=None, mode="live", team=False,
-               team_concurrency=3, team_game_designer=False):
+               team_concurrency=0, team_game_designer=False):
         project = Path(project).expanduser().resolve()
         project.mkdir(parents=True, exist_ok=True)
         root = state_root(project)
@@ -618,6 +618,9 @@ class Store:
         return []
 
     def owner_gate(self, task):
+        from .team import company_enabled
+        if company_enabled(self):
+            return task["stage"] in self.config["gates"] or task["id"] in self.config.get("task_gates", []) and not self.config["team"].get("autonomous_checkpoint")
         return (task["stage"] == "design" and self.config.get("screen_design_required", False) or
                 task["stage"] in self.config["gates"] or task["id"] in self.config.get("task_gates", []) and
                 not (self.config.get("team", {}).get("enabled") and self.config["team"].get("autonomous_checkpoint")))
@@ -689,6 +692,10 @@ class Store:
                                      json.dumps(item["criteria"]), json.dumps(item["requirements"]), json.dumps(item.get("checks", [])), "pending", now()))
                 self.db.execute("UPDATE tasks SET deps=? WHERE id='verify'", (json.dumps([item["id"] for item in tasks]),))
             config = self.config
+            if config.get("team", {}).get("policy") == "autonomous":
+                assignments = dict(config["team"].get("task_agents", {}))
+                assignments.update({item["id"]: item["worker"] for item in tasks if item.get("worker")})
+                config["team"]["task_agents"] = assignments
             config["verification_commands"] = plan.get("verification_commands", [])
             config["browser_required"] = plan.get("browser_required", False)
             checkpoint = plan.get("experience_checkpoint")
@@ -893,9 +900,12 @@ class Store:
                 if baseline:
                     task["design_baseline"] = json_object(self.root / baseline["object_path"])
                     task["design_baseline"]["reference_evidence"] = next((item["id"] for item in current if item["source"] == task["design_baseline"].get("visual_reference")), None)
-                    task["design_baseline"]["approval"] = "approved" if task["status"] == "done" and any(
+                    owner_approved = task["status"] == "done" and any(
                         row["task_id"] == task["id"] and row["revision"] == task["revision"] and row["action"] == "approve"
-                        for row in decisions) else "pending"
+                        for row in decisions)
+                    company_approved = task["status"] == "done" and self.config.get("team", {}).get("policy") == "autonomous" and self.config["team"].get("enabled")
+                    task["design_baseline"]["approval"] = "approved" if owner_approved or company_approved else "pending"
+                    task["design_baseline"]["approval_actor"] = "owner" if owner_approved else "company" if company_approved else None
                     for screen in task["design_baseline"].get("screens", []):
                         for reference in screen["references"]:
                             reference["evidence_id"] = next((item["id"] for item in current if item["source"] == reference["image"]), None)

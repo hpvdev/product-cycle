@@ -27,7 +27,13 @@ For controller-backed work, read [stage contracts](../product-cycle/references/c
 
 New local cycles use policy.service_setup_required: architecture identifies necessary services and user inputs without configuring them; plan links each increment to its required services and defines local delivery; handoff presents the verified local product. Configuration tasks run after design and plan review. VPS and external release are deferred. Respect configured owner gates.
 
-When policy.screen_design_required is true, read context.screen_design_contract for the assigned stage. Design inventories all screens/states/transitions before creating an owner-approved image bundle. Plan binds increments to specific screen/state/viewport targets. UI build and verify retain actual image-to-render comparisons against that bundle, with functional evidence separate. Never downgrade an approved image to a style hint or silently drop its assets.
+When policy.screen_design_required is true, read context.screen_design_contract for the assigned stage. Design inventories all screens/states/transitions before creating an image bundle accepted under the selected policy. Plan binds increments to specific screen/state/viewport targets. UI build and verify retain actual image-to-render comparisons against that bundle, with functional evidence separate. Never downgrade an approved image to a style hint or silently drop its assets.
+
+## Company assignments
+
+With team.enabled and team.policy = autonomous, plan from the company-selected design baseline after the human analysis gate; in supervised mode retain the configured owner approvals. A director decision is not human approval. Independent review and accepted criteria remain unchanged.
+
+A plan task may use the optional worker field with build, frontend, backend, mobile or game_engineer. Omit it for the build fallback. Select specialization for the actual increment, retaining its requirements, criteria, dependencies, accepted references and evidence. This does not split or expand product scope, launch peers or grant another source-writer slot. The controller owns dispatch and the one-writer rule; follow [team operation](../product-cycle/references/team-operation.md).
 
 ## Khi sản phẩm là game
 

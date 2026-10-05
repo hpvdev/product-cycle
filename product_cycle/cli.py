@@ -24,14 +24,14 @@ def parser():
     init.add_argument("--name", required=True)
     init.add_argument("--executor", choices=["codex-desktop", "codex-app-server"], default="codex-desktop")
     init.add_argument("--team", action="store_true", help="Bật nhóm AI do điều phối nền quản lý; chưa tự chạy")
-    init.add_argument("--team-concurrency", type=int, default=3)
+    init.add_argument("--team-concurrency", type=int, default=0, help="0 để giao việc theo nhu cầu; số dương đặt giới hạn vận hành")
     init.add_argument("--team-game-designer", action="store_true")
     init.add_argument("--model", help="Dùng model này cho mọi bước thay cho cấu hình theo vai trò")
     init.add_argument("--max-turn-tokens", type=int, help="Ngân sách token mỗi phiên; mặc định chỉ theo dõi")
     init.add_argument("--max-cycle-tokens", type=int, help="Ngân sách token toàn quy trình; mặc định chỉ theo dõi")
     init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"],
                       help="Dùng effort này cho mọi bước thay cho cấu hình theo vai trò")
-    for name in ["bootstrap", "install-skills", "update-skills", "uninstall-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress", "supervise", "team-stop", "team-status"]:
+    for name in ["bootstrap", "install-skills", "update-skills", "uninstall-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress", "supervise", "team-stop", "team-status", "team-answer", "company-work", "company-claim", "company-bind", "company-submit", "company-stop", "company-improvements", "company-rollback"]:
         cmd = sub.add_parser(name)
         cmd.add_argument("--project", required=True)
         if name == "update-skills":
@@ -48,6 +48,22 @@ def parser():
             cmd.add_argument("--team-mode", choices=["on", "off"])
             cmd.add_argument("--team-concurrency", type=int)
             cmd.add_argument("--team-game-designer", action="store_true", default=None)
+            cmd.add_argument("--team-policy", choices=["autonomous", "supervised"])
+        if name == "team-answer":
+            cmd.add_argument("--question", required=True)
+            cmd.add_argument("--actor", required=True)
+            cmd.add_argument("--answer", required=True)
+        if name in {"company-claim", "company-bind", "company-submit", "company-stop"}:
+            cmd.add_argument("--job", required=True)
+            cmd.add_argument("--actor", required=True)
+        if name in {"company-bind", "company-submit"}:
+            cmd.add_argument("--thread", required=True)
+        if name == "company-submit":
+            cmd.add_argument("--file", required=True)
+        if name == "company-stop":
+            cmd.add_argument("--reason", required=True)
+        if name == "company-rollback":
+            cmd.add_argument("--candidate", required=True)
         if name == "supervise":
             cmd.add_argument("--once", action="store_true", help="Chạy một nhịp điều phối, chờ các phiên đã mở hoàn tất")
             cmd.add_argument("--poll-seconds", type=float, default=2)
@@ -204,6 +220,33 @@ def main(argv=None):
             from .team import stop, TeamStore
             result = stop(store) if args.command == "team-stop" else TeamStore(store).snapshot()
             print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.command == "team-answer":
+            from .company_questions import answer
+            with runner_lock(store):
+                result = answer(store, args.question, args.actor, args.answer)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        elif args.command.startswith("company-"):
+            from . import capability_jobs
+            from .improvements import ImprovementStore
+            if args.command == "company-improvements":
+                result = ImprovementStore(store).snapshot()
+            elif args.command == "company-rollback":
+                result = ImprovementStore(store).rollback(args.candidate)
+            else:
+                with runner_lock(store):
+                    if args.command == "company-work":
+                        capability_jobs.expire(store)
+                        result = capability_jobs.snapshot(store)
+                    elif args.command == "company-claim":
+                        result = capability_jobs.claim(store, args.job, args.actor, store.project)
+                    elif args.command == "company-bind":
+                        result = capability_jobs.bind(store, args.job, args.actor, args.thread)
+                    elif args.command == "company-submit":
+                        manifest = json.loads(store.safe_path(args.file).read_text())
+                        result = capability_jobs.fulfill(store, args.job, args.actor, args.thread, manifest)
+                    else:
+                        result = capability_jobs.stop(store, args.job, args.actor, args.reason)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         elif args.command == "run":
             outcome = run_cycle(store, args.max_tasks, continue_blocked=args.continue_blocked)
             if outcome:
@@ -220,13 +263,13 @@ def main(argv=None):
                     print(json.dumps(outcome, ensure_ascii=False, indent=2))
         elif args.command == "configure":
             with runner_lock(store):
-                require(args.executor is not None or args.team_mode is not None, "Chọn executor hoặc chế độ nhóm cần cập nhật.")
+                require(args.executor is not None or args.team_mode is not None or args.team_policy is not None or args.team_concurrency is not None, "Chọn cách vận hành cần cập nhật.")
                 require(not store.db.execute("SELECT id FROM attempts WHERE status IN ('running','queued')").fetchone(),
                         "Kết thúc hoặc khôi phục phiên đang chạy trước khi đổi nơi thực thi.")
-                if args.team_mode is not None:
+                if args.team_mode is not None or args.team_policy is not None or args.team_concurrency is not None:
                     from .team import configure
                     require(args.executor in {None, "codex-app-server"} or args.team_mode == "off", "Nhóm AI dùng executor app-server.")
-                    configure(store, args.team_mode == "on", args.team_concurrency, args.team_game_designer)
+                    configure(store, args.team_mode == "on" if args.team_mode else store.config.get("team", {}).get("enabled", False), args.team_concurrency, args.team_game_designer, policy=args.team_policy)
                 if args.executor is not None:
                     from .team import enabled
                     require(not enabled(store) or args.executor == "codex-app-server", "Dừng và tắt nhóm trước khi đổi sang Codex Desktop.")

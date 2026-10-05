@@ -20,3 +20,9 @@ When invoked on its own, perform only the requested stage in the selected projec
 5. Đề xuất cho vòng sau: Đưa đề xuất có bằng chứng; chưa tự thay đổi quy trình đang chạy.
 
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
+
+## Company improvement assignments
+
+In ordinary retro or supervised mode, return evidence-backed proposals; do not apply them. Only under team.enabled and team.policy = autonomous may the controller assign the bounded improvement cycle: Process Lead selects an observed failure, Skill Engineer authors a candidate, Evaluation Engineer forward-tests the same raw cases against before/after guidance, and a separate Improvement Reviewer inspects the exact candidate and results in fresh read-only context. Read [bounded guidance improvement](../product-cycle-improve/SKILL.md) for an assigned mission and [team operation](../product-cycle/references/team-operation.md) for role boundaries. This does not add a product stage or change the retro schema.
+
+The controller applies eligible reviewed guidance only at a stable point, with original versions, backups, evidence and rollback retained. Retro workers do not edit installed skills, invoke this cycle recursively or weaken scope, permissions, owner gates or acceptance to pass. Structural or synthetic checks alone do not show improved product judgment; missing actual forward outputs leave the candidate pending or rejected. Skills can improve instructions and tool use, not enlarge model ability or guarantee quality. No live product run is authorized merely to test an improvement.

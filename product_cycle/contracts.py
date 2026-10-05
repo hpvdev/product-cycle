@@ -238,6 +238,8 @@ def validate_plan(value, requirement_ids):
     ids = set()
     for task in tasks:
         require(isinstance(task, dict), "Công việc chưa đúng cấu trúc.")
+        require(task.get("worker") is None or task["worker"] in {"build", "frontend", "backend", "mobile", "game_engineer"},
+                "Chọn kỹ sư phù hợp cho đầu việc phát triển.")
         tid = task.get("id", "")
         require(isinstance(tid, str) and tid.startswith("T") and tid.replace("-", "").isalnum() and tid not in ids,
                 "Mã công việc phải bắt đầu bằng T và không trùng.")

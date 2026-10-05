@@ -1,6 +1,7 @@
 """Local dashboard; same-origin controls; only registered evidence is exposed."""
 
 import json
+import html
 import mimetypes
 import secrets
 import subprocess
@@ -14,6 +15,32 @@ from .contracts import WorkflowError, require
 from .store import Store, runner_lock
 from . import desktop
 from .codex import CodexClient
+
+
+def company_document(data):
+    """Readable sealed reports; strings are escaped, never executed as HTML."""
+    names = {"summary": "Tóm tắt", "reason": "Lý do", "findings": "Nhận xét",
+             "decision": "Kết luận", "observations": "Quan sát", "cases": "Tình huống",
+             "improved": "Có cải thiện", "regressed": "Có suy giảm",
+             "before": "Trước cải tiến", "after": "Sau cải tiến", "title": "Tiêu đề"}
+    def render(value):
+        if isinstance(value, dict):
+            return '<dl>' + ''.join('<dt>' + html.escape(names.get(key, key)) + '</dt><dd>' + render(item) + '</dd>' for key, item in value.items()) + '</dl>'
+        if isinstance(value, list):
+            return '<ul>' + ''.join('<li>' + render(item) + '</li>' for item in value) + '</ul>'
+        if isinstance(value, bool):
+            return "Có" if value else "Không"
+        return '<div class="text">' + html.escape(str(value) if value is not None else "Chưa ghi nhận") + '</div>'
+    text = data.decode('utf-8', errors='replace')
+    try:
+        body = render(json.loads(text))
+    except json.JSONDecodeError:
+        body = render(text)
+    return ('<!doctype html><html lang="vi"><meta charset="utf-8"><title>Bằng chứng cải tiến</title>'
+            '<style>body{font:16px/1.65 system-ui;color:#24324b;background:#f6f8fc;margin:0;padding:40px}'
+            'main{max-width:1050px;margin:auto;background:white;padding:32px;border-radius:16px}'
+            'dt{font-weight:650;margin-top:18px}dd{margin:6px 0 0 20px}.text{white-space:pre-wrap;overflow-wrap:anywhere}'
+            'li{margin:12px 0}h1{font-size:24px}</style><main><h1>Bằng chứng cải tiến</h1>' + body + '</main></html>').encode()
 
 
 def serve(project, port=8787):
@@ -128,6 +155,16 @@ def serve(project, port=8787):
                     mime = mimetypes.guess_type(row["source"])[0]
                     safe_mime = mime if mime in {"image/png", "image/jpeg", "image/webp", "application/pdf"} else "text/plain; charset=utf-8"
                     return self.reply(200, (store.root / row["object_path"]).read_bytes(), safe_mime)
+                if route.startswith("/company-evidence/"):
+                    from .improvements import ImprovementStore
+                    parts = route.split("/")
+                    require(len(parts) == 4, "Địa chỉ bằng chứng chưa hợp lệ.")
+                    data = ImprovementStore(store).evidence_path(parts[2], parts[3]).read_bytes()
+                    if data.startswith(b'\x89PNG\r\n\x1a\n'):
+                        return self.reply(200, data, "image/png")
+                    if data.startswith(b'\xff\xd8\xff'):
+                        return self.reply(200, data, "image/jpeg")
+                    return self.reply(200, company_document(data), "text/html; charset=utf-8")
                 self.reply(404, {"error": "Không tìm thấy nội dung."})
             except WorkflowError as exc:
                 self.reply(400, {"error": str(exc)})

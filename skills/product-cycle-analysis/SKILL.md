@@ -35,6 +35,10 @@ Interview the owner in Codex and preserve actual feedback through owner-input wh
 
 In product-direction.json, open_questions lists unanswered product choices, not the formal approval gate. Close a choice only from an explicit answer or recorded owner delegation, with truthful provenance; an empty list does not grant gate approval. A delegated AI decision is not direct human feedback. Keep remaining tuning and research hypotheses in analysis.md with their evaluation or deferment.
 
+## Company policy
+
+Analysis remains a human product-direction gate under the explicitly enabled autonomous-company policy as well as under configured supervised gates. When the assigned session exposes team_ask_owner, record the question, reason, meaningful options and recommendation through that tool and use only an actual recorded owner answer; an open question requires the matching Cần bạn trả lời: ... blocker for dependent work. Otherwise use the supported owner workflow in Codex. An answer resolves that question; it does not by itself approve the stage. Director delegation for later design cannot substitute for accepted product scope or authorize a new requirement. Read [team operation](../product-cycle/references/team-operation.md) for the selected policy.
+
 ## Khi sản phẩm là game
 
 If the brief or accepted direction asks for a game, read [Game Design](../product-cycle-game-design/SKILL.md) as a companion to this stage. Use its concept and analysis guidance to establish player agency, world consequences, the core loop and chosen appeal before freezing features. Keep accepted scope, configured owner gates and evidence boundaries; the companion is not a new stage or an execution command.

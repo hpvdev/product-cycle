@@ -788,7 +788,9 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(foundation["repository"]["branch"], "main")
             self.assertIsNone(foundation["repository"]["head"])
             self.assertEqual(git(store.project, "remote").stdout, "")
-            self.assertEqual(len(list((store.project / ".agents/skills").glob("*/SKILL.md"))), 15)
+            self.assertEqual(len(list((store.project / ".agents/skills").glob("*/SKILL.md"))), 17)
+            self.assertTrue((store.project / ".agents/skills/product-cycle-company-worker/SKILL.md").is_file())
+            self.assertTrue((store.project / ".agents/skills/product-cycle-improve/SKILL.md").is_file())
             self.assertTrue((store.project / ".agents/skills/product-cycle-game-design/SKILL.md").is_file())
             for path in [".env", ".env.production", ".product-cycle/private.json"]:
                 self.assertEqual(git(store.project, "check-ignore", "--no-index", path).returncode, 0)

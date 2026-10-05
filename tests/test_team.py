@@ -85,6 +85,11 @@ class TeamTests(unittest.TestCase):
         self.env = patch.dict(os.environ, {"PRODUCT_CYCLE_HOME": str(base / "state")})
         self.env.start()
         self.store = Store.create(base / "project", "Synthetic team facts", "Team test", mode="demo", team=True)
+        # These regression cases retain the original supervised team policy.
+        config = self.store.config
+        config["team"].update(policy="supervised", max_concurrent=3)
+        config["gates"] = ["analysis", "design", "handoff"]
+        write_json(self.store.root / "config.json", config)
         self.team = TeamStore(self.store)
         SyntheticProvider.project = self.store.project
         SyntheticProvider.mode, SyntheticProvider.threads, SyntheticProvider.calls = "success", {}, []
