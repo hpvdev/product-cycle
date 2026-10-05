@@ -41,3 +41,31 @@
 .office-title-label .office-agent-status{display:block;font-size:10px;line-height:1.35;margin-top:4px;color:inherit}.office-peer-status{display:block;font-size:10px;line-height:1.35;color:inherit;margin-top:3px;overflow-wrap:anywhere}.office-peer-status:empty{display:none}
 
 .office-owner-alert{flex-basis:100%;display:flex;align-items:center;gap:12px;padding:12px 16px;background:#fff6df;border:1px solid #eed5a2;border-radius:10px;color:#70470e}.office-owner-alert[hidden]{display:none}.office-owner-alert>img{width:23px;height:23px}.office-owner-alert>div{flex:1;min-width:0}.office-owner-alert p{font-size:12px;line-height:1.5;margin:4px 0 0;overflow-wrap:anywhere}.office-question-link{display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border:1px solid #cddcfa;border-radius:8px;font-size:12px;color:#185bea;background:#fff}.office-question-link img{width:17px;height:17px}.office-question-action{padding:14px;background:#fff7e6;border:1px solid #eed5a2;border-radius:10px;margin:12px 0}.office-question-action .office-company-record{margin:0;border:0;padding:0;background:none}.office-owner-badge{display:inline-flex;align-items:center;justify-content:center;background:#fff0ca;border:1px solid #e1b767;border-radius:50%;width:24px;height:24px;position:absolute;right:-8px;top:-8px;z-index:2}.office-owner-badge img{width:15px;height:15px}.office-title-label.awaiting-owner{border-color:#d6aa50}.office-roster-item{position:relative}.office-roster-item .office-owner-badge{right:6px;top:6px}.office-owner-alert .office-question-link{flex-shrink:0}
+
+/* Status markers stay readable independently of the office camera zoom. */
+#office-viewport:not(.office-details) .office-title-label{width:24px;height:24px;min-height:24px;padding:0;border:0;border-radius:50%;background:transparent;box-shadow:none;transform:translate(-50%,-50%)}
+#office-viewport:not(.office-details) .office-title-label>strong,#office-viewport:not(.office-details) .office-title-label>.office-agent-status,#office-viewport:not(.office-details) .office-title-label>.office-peer-status{display:none}
+#office-viewport .office-title-label>.office-agent-dot{width:12px;height:12px;box-sizing:border-box;border:2px solid #fff;background:#8492a6}
+#office-viewport:not(.office-details) .office-title-label>.office-agent-dot{left:6px;top:6px;right:auto}
+#office-viewport .office-title-label[data-indicator="working"]>.office-agent-dot{background:#159b65}
+#office-viewport .office-title-label[data-indicator="waiting"]>.office-agent-dot{background:#d89b16}
+#office-viewport .office-title-label[data-indicator="error"]>.office-agent-dot{background:#d63e42}
+.office-title-label:focus-visible{outline:2px solid #185bea;outline-offset:3px}
+.office-details .office-title-label{width:120px;white-space:nowrap}
+.office-details .office-title-label strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.office-details .office-title-label>.office-agent-status,.office-details .office-title-label>.office-peer-status{display:none}
+
+/* Pixel office art is separate from the readable dashboard controls. */
+.office-pixel-worker{image-rendering:pixelated}
+.office-pixel-worker.working{animation:office-pixel-working 1.2s steps(2,end) infinite}
+@keyframes office-pixel-working{50%{transform:translateY(-2px)}}
+.office-pixel-avatar img{width:160%;left:50%;top:50%;transform:translate(-50%,-40%);image-rendering:pixelated}
+.office-pixel .office-title-label>.office-agent-dot{border-radius:2px}
+@media(prefers-reduced-motion:reduce){.office-pixel-worker.working{animation:none}}
+
+.office-pixel-worker,.office-pixel-portrait{background-repeat:no-repeat;image-rendering:pixelated;clip-path:inset(var(--sprite-crop-top,0%) 0 0)}
+.office-pixel-portrait{position:absolute;width:180%;height:180%;left:-40%;top:-12%}
+
+.office-question-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.office-question-copy-status{font-size:12px;line-height:1.5;color:#185bea}
+.office-question-copy-text{display:block;width:100%;min-height:160px;margin-top:8px;font-size:12px;line-height:1.5}

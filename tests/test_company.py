@@ -14,6 +14,7 @@ from product_cycle.company_learning import jobs, reserve, complete, pending, ref
 from product_cycle.contracts import WorkflowError, work_steps
 from product_cycle.cli import parser
 from product_cycle.server import company_document
+from product_cycle.fixtures import complete_fixture
 
 
 class CompanyTests(unittest.TestCase):
@@ -39,8 +40,8 @@ class CompanyTests(unittest.TestCase):
         return self.team.run(run["id"])
 
     def test_new_policy_and_explicit_legacy_migration(self):
-        self.assertEqual(self.store.config["gates"], ["analysis"])
-        self.assertTrue(self.store.owner_gate(self.store.task("analysis")))
+        self.assertEqual(self.store.config["gates"], [])
+        self.assertFalse(self.store.owner_gate(self.store.task("analysis")))
         self.assertFalse(self.store.owner_gate(self.store.task("design")))
         self.assertTrue(self.store.config["team"]["self_improve"])
         config = self.store.config
@@ -59,6 +60,25 @@ class CompanyTests(unittest.TestCase):
         self.assertTrue(at_capacity(self.store, runs, "work"))
         self.assertFalse(at_capacity(self.store, runs, "consult"))
         self.assertFalse(at_capacity(self.store, [{"phase": "consult"}] * 20, "work"))
+
+    def test_explicit_autonomous_policy_replaces_legacy_analysis_gate(self):
+        config = self.store.config
+        config["gates"] = ["analysis"]
+        config["collaborative_product"] = True
+        write_json(self.store.root / "config.json", config)
+        configure(self.store, max_concurrent=4)
+        self.assertTrue(self.store.owner_gate(self.store.task("analysis")))
+        configure(self.store, policy="autonomous")
+        complete_fixture(self.store, "analysis", approve=False)
+        self.assertEqual(self.store.task("analysis")["status"], "done")
+        self.assertEqual(self.store.task("analysis")["review"]["decision"], "approve")
+        self.assertFalse(list(self.store.db.execute("SELECT id FROM decisions")))
+        self.assertEqual(self.store.next_task()["id"], "design")
+
+    def test_supervised_policy_restores_owner_analysis_gate(self):
+        configure(self.store, policy="supervised")
+        complete_fixture(self.store, "analysis", approve=False)
+        self.assertEqual(self.store.task("analysis")["status"], "awaiting_approval")
 
     def test_hired_employee_is_independent_and_specialized(self):
         role = self.team.hire("product_manager")

@@ -33,10 +33,21 @@ def write_json(path, value):
     os.replace(temp, path)
 
 
-def state_root(project):
+def state_root(project, project_id=None):
     home = Path(os.environ.get("PRODUCT_CYCLE_HOME", str(Path.home() / ".local" / "share" / "product-cycle"))).expanduser().resolve()
+    project = Path(project).expanduser().resolve()
+    marker = project / ".product-cycle" / "identity.json"
+    if project_id is None:
+        if marker.is_file():
+            project_id = json_object(marker).get("id")
+            require(isinstance(project_id, str) and re.fullmatch(r"[0-9a-f]{32}", project_id),
+                    "ID dự án Product Cycle không hợp lệ; kiểm tra .product-cycle/identity.json.")
+        elif not (project / ".product-cycle").is_dir():
+            project_id = "uninitialized"
+    identity = str(project) + ("\0" + project_id if project_id is not None else "")
     # State and sealed evidence are outside the agent's writable project roots.
-    return home / hashlib.sha256(str(Path(project).resolve()).encode()).hexdigest()[:24]
+    # Legacy projects retain their path-based state while their local directory exists.
+    return home / hashlib.sha256(identity.encode()).hexdigest()[:24]
 
 
 def source_files(project):
@@ -90,7 +101,9 @@ class Store:
                team_concurrency=0, team_game_designer=False, awaiting_request=False):
         project = Path(project).expanduser().resolve()
         project.mkdir(parents=True, exist_ok=True)
-        root = state_root(project)
+        require(not (state_root(project) / "state.sqlite3").is_file(), "Dự án đã có một quy trình; dùng status để kiểm tra.")
+        project_id = uuid.uuid4().hex
+        root = state_root(project, project_id)
         require(not root.is_relative_to(project), "PRODUCT_CYCLE_HOME phải nằm ngoài dự án.")
         require(not root.exists(), "Dự án đã có một quy trình; dùng status để kiểm tra.")
         require(brief.strip() or awaiting_request is True, "Cần mô tả mục tiêu sản phẩm.")
@@ -150,6 +163,7 @@ class Store:
             if awaiting_request:
                 db.execute("UPDATE meta SET value='paused' WHERE key='state'")
                 db.execute("INSERT INTO meta VALUES('onboarding.awaiting_request','1')")
+        write_json(project / ".product-cycle" / "identity.json", {"id": project_id})
         store = cls(project)
         previous = []
         stages = ["analysis", "design", "architecture", "plan"]

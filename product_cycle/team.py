@@ -129,6 +129,7 @@ def migrate(db):
 
 
 def configure(store, active=True, max_concurrent=None, game_designer=None, new_cycle=False, policy=None):
+    selected_policy = policy
     previous = store.config.get("team", {})
     max_concurrent = previous.get("max_concurrent", 0 if new_cycle else 3) if max_concurrent is None else max_concurrent
     game_designer = previous.get("game_designer", False) if game_designer is None else game_designer
@@ -156,8 +157,10 @@ def configure(store, active=True, max_concurrent=None, game_designer=None, new_c
             for key in ("previous_gates", "previous_task_gates"):
                 config["team"][key] = previous.get(key, [])
         config.update(executor="codex-app-server", dashboard_read_only=True)
-        if new_cycle or policy == "autonomous" and previous.get("policy") != "autonomous":
-            config["gates"] = ["analysis"] if policy == "autonomous" else ["analysis", "design", "handoff"]
+        if new_cycle or policy == "autonomous" and (selected_policy is not None or previous.get("policy") != "autonomous"):
+            config["gates"] = [] if policy == "autonomous" else ["analysis", "design", "handoff"]
+            if policy == "autonomous":
+                config["team"]["autonomous_checkpoint"] = True
         elif policy == "supervised" and previous.get("policy") == "autonomous":
             config["gates"] = previous.get("previous_gates", ["analysis", "design", "handoff"])
             config["task_gates"] = previous.get("previous_task_gates", [])
@@ -774,8 +777,10 @@ def run_mission(project, rid, client_factory, cancel):
                    "Preflight outcomes (failed consultations are limitations, not successful advice): " + json.dumps(preflights, ensure_ascii=False) + "\n" +
                    "Initial delivered peer messages (advice only): " + json.dumps(pending, ensure_ascii=False))
         if company_enabled(store):
-            prompt += ("\nAutonomous company policy: the owner collaborates on initial analysis. After accepted analysis, "
-                       "the company chooses design and routine implementation decisions within that scope. Record these "
+            prompt += ("\nAutonomous company policy: analyze the supplied brief and choose reasonable, reversible defaults "
+                       "within its scope without an owner interview or mandatory analysis approval. Record assumptions "
+                       "and their provenance, then obtain independent review before dependent work. "
+                       "The company chooses design and routine implementation decisions within that scope. Record these "
                        "as AI-delegated decisions, never human approval. Use team_ask_owner only for unresolved goal/scope, "
                        "access, cost or execution capability. Need a colleague's answer? Request a consultation, not merely "
                        "a message to an inactive employee. A specialty title does not prove available tools. "

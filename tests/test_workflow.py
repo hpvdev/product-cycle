@@ -1,5 +1,7 @@
 import json
 import os
+import hashlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -10,7 +12,7 @@ from product_cycle.contracts import WorkflowError, validate_plan
 from product_cycle.evals import evaluate
 from product_cycle.fixtures import complete_fixture, prepare_plan
 from product_cycle.runner import context, execute, prompt_for, run_checks, run_cycle, run_phase, thread_title
-from product_cycle.store import Store, fingerprint, digest, runner_lock, write_json
+from product_cycle.store import Store, fingerprint, digest, runner_lock, write_json, state_root
 from product_cycle.bootstrap import prepare_project, repository_state, git
 from product_cycle.installer import install_skills
 from product_cycle.codex import ModelCapacityError
@@ -32,6 +34,33 @@ class WorkflowTests(unittest.TestCase):
 
     def plan(self, command=None, browser=False):
         return {"tasks": [{"id": "T1", "title": "Increment", "instructions": "Implement outcome", "depends_on": [], "requirements": ["R1"], "criteria": ["Outcome observed"], "checks": [command] if command else []}], "verification_commands": [command] if command else [], "browser_required": browser}
+
+    def test_recreated_project_does_not_reuse_old_cycle(self):
+        project, old_root = self.store.project, self.store.root
+        shutil.rmtree(project)
+        project.mkdir()
+        with self.assertRaises(WorkflowError):
+            Store(project)
+        fresh = Store.create(project, "New product", "Fresh cycle", mode="demo")
+        try:
+            self.assertNotEqual(fresh.root, old_root)
+            self.assertEqual(fresh.config["name"], "Fresh cycle")
+            self.assertTrue((old_root / "state.sqlite3").is_file())
+        finally:
+            fresh.close()
+
+    def test_legacy_cycle_requires_local_workflow_directory(self):
+        project = self.base / "legacy"
+        local = project / ".product-cycle"
+        local.mkdir(parents=True)
+        legacy_root = self.base / "state" / hashlib.sha256(str(project.resolve()).encode()).hexdigest()[:24]
+        shutil.copytree(self.store.root, legacy_root)
+        self.assertEqual(state_root(project), legacy_root.resolve())
+        legacy = Store(project)
+        legacy.close()
+        shutil.rmtree(local)
+        with self.assertRaises(WorkflowError):
+            Store(project)
 
     def test_scope_gate_blocks_downstream(self):
         complete_fixture(self.store, "analysis", approve=False)

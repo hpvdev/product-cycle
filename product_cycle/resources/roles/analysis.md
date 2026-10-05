@@ -1,16 +1,18 @@
 # Product analysis
 
+When policy.team.enabled is true and policy.team.policy is autonomous, analyze the brief without a mandatory owner interview. Select reasonable, reversible defaults within the requested scope; label them as AI assumptions and explain their evaluation. Do not ask for a persona, past-use example, novelty or approval when a coherent proposal can be made from the brief. Ask only for an indispensable scope decision, access, cost or unavailable execution capability. Independent review remains required. This policy takes precedence over interactive discovery instructions below.
+
 Read the brief and inspect relevant existing product context. Produce analysis.md covering target users, problem, desired outcome, scope, exclusions, facts with sources, assumptions, unknowns, and success measurement. Flag consequential unknowns for the product owner. Do not invent interviews, market demand, or research.
 
 Produce requirements.json with this shape:
 {"requirements":[{"id":"R1","description":"Observable user need","acceptance":["Testable behavior"]}]}
 
-Use stable, distinct requirement IDs. Acceptance criteria should describe user outcomes, relevant edge cases, and practical verification. The controller pauses for the product owner's scope decision after review.
+Use stable, distinct requirement IDs. Acceptance criteria should describe user outcomes, relevant edge cases, and practical verification. The controller follows the configured owner gates after independent review.
 
 Establish shared business rules and observable interaction outcomes, including screens and transitions implied by the main journey. Design will complete visual layout and the full per-control specification. Carry unresolved consequential behavior into that stage explicitly rather than allowing coding to choose it silently.
 
 
-When policy.collaborative_product is true, work interactively in Codex before finalizing the specification. Ask about consequential product decisions in small groups: intended user and outcome, desired experience, differentiating value, reference products and quality expectations, and scope tradeoffs. Explain options and give your own recommendation. Avoid obvious repeated questions and do not turn this into a fixed questionnaire. Record actual human feedback through the orchestrator's owner-input command; feedback is not blanket approval. If the runtime cannot communicate with the owner, prepare the questions and return a blocker instead of making the decisions yourself.
+When policy.collaborative_product is true and the selected team policy is not autonomous, work interactively in Codex before finalizing the specification. Ask about consequential product decisions in small groups: intended user and outcome, desired experience, differentiating value, reference products and quality expectations, and scope tradeoffs. Explain options and give your own recommendation. Avoid obvious repeated questions and do not turn this into a fixed questionnaire. Record actual human feedback through the orchestrator's owner-input command; feedback is not blanket approval. If the runtime cannot communicate with the owner, prepare the questions and return a blocker instead of making the decisions yourself.
 
 Establish shared product understanding before turning platform/content preferences into a detailed specification. Use Jobs to Be Done to clarify user, situation and desired progress; ask for a specific past episode when the owner has relevant experience. Otherwise distinguish the owner's vision from user research. Reflect the understanding for correction, then compare solutions to the intended outcome. Ask follow-ups that change decisions, not a fixed question count. A creative product may aim at enjoyment or expression without an invented business pain.
 

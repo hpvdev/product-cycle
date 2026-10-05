@@ -89,6 +89,15 @@ def prompt_for(store, task, directory, review=False):
         guide += "\nRead screen_design_contract for the assigned stage. Use the accepted screen/state references exactly; never demote approved images to style exploration or replace them with a simpler prototype. Report tool gaps as blockers; do not fabricate screen captures or owner approval."
     if task["stage"] == "analysis" and store.config.get("collaborative_product"):
         packet["required_files"] += ["product-direction.json"]
+    if store.config.get("team", {}).get("enabled") and store.config["team"].get("policy") == "autonomous":
+        guide += ("\nSelected autonomous policy takes precedence over interview instructions in installed skills. "
+                  "Use the brief and existing inputs to make reasonable, reversible product assumptions; "
+                  "record them as AI decisions under the selected policy, never as human feedback. "
+                  "Do not require an owner interview, past-use example or analysis approval merely to start. "
+                  "Ask the owner only when the brief cannot support a coherent product without a consequential "
+                  "scope change, or when access, spending or an unavailable capability blocks progress. "
+                  "Review must evaluate the actual analysis and stated assumptions, not reject it solely for "
+                  "missing human interview or approval. Preserve independent review and the configured gates.")
     if store.config.get("service_setup_required") and task["stage"] == "architecture":
         packet["required_files"] = packet["required_files"] + ["services.json"]
     if store.config.get("project_setup_required") and task["stage"] == "architecture":
