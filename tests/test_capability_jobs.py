@@ -11,7 +11,7 @@ from unittest.mock import patch
 from product_cycle import capability_jobs as jobs
 from product_cycle import company_questions as questions
 from product_cycle.contracts import WorkflowError
-from product_cycle.store import Store
+from product_cycle.store import Store, write_json
 from product_cycle.team import TeamStore
 from product_cycle.runner import browser_ready
 from product_cycle.company import management_jobs
@@ -93,6 +93,57 @@ class CapabilityJobTests(unittest.TestCase):
         self.block()
         with self.assertRaises(WorkflowError):
             self.request("late")
+
+    def test_native_shared_instance_reservation_survives_unknown_outcome(self):
+        with self.store.db:
+            self.store.db.execute("UPDATE team_runs SET resource_key='synthetic-shared-runtime' WHERE id=?", (self.run["id"],))
+        first, second = self.request("first"), self.request("second")
+        self.block()
+        self.bind(first)
+        self.assertTrue(jobs.resource_in_use(self.store, first["resource_key"]))
+        with self.assertRaises(WorkflowError):
+            jobs.claim(self.store, second["id"], "Native worker", self.store.project)
+        jobs.stop(self.store, first["id"], "Native worker", "Synthetic lost native outcome")
+        with self.assertRaises(WorkflowError):
+            jobs.claim(self.store, second["id"], "Native worker", self.store.project)
+        self.submit(first)
+        self.assertFalse(jobs.resource_in_use(self.store, first["resource_key"]))
+        self.assertEqual(jobs.claim(self.store, second["id"], "Native worker", self.store.project)["status"], "claimed")
+
+    def test_isolated_job_pins_workspace_through_native_submission_and_resume(self):
+        self.block()
+        config = self.store.config
+        config.update(agent_workflow_version=1, workspace_mode="isolated")
+        write_json(self.store.root / "config.json", config)
+        self.store.add_task("T1", "build", "Synthetic feature", "Synthetic change", [], ["Observed"], [], [])
+        from product_cycle.workspaces import prepare
+        root = prepare(self.store, self.store.task("T1"))
+        (root / "feature.txt").write_text("Workspace feature")
+        self.store.update("T1", status="running", attempts=1)
+        with self.store.db:
+            self.store.db.execute("UPDATE team_runs SET task_id='T1',attempt_id=NULL,status='running',source_writer=0 WHERE id=?",
+                                  (self.run["id"],))
+        run = self.team.run(self.run["id"])
+        job = jobs.request(self.store, run, "computer_use", "Observe isolated feature", "workspace")
+        self.assertEqual(job["source_root"], str(root))
+        self.assertEqual(job["source_fingerprint"], self.store.task_fingerprint("T1"))
+        self.team.update(run["id"], status="completed")
+        self.store.update("T1", status="blocked", reason=jobs.BLOCKER_PREFIX + "Native observation")
+        (self.store.project / "canonical.txt").write_text("Independent canonical change")
+        self.assertEqual(jobs.expire(self.store), [])
+        jobs.claim(self.store, job["id"], "Native worker", self.store.project)
+        NativeThreadReader.thread = {"id": "native-thread", "cwd": str(root)}
+        jobs.bind(self.store, job["id"], "Native worker", "native-thread", NativeThreadReader)
+        manifest = self.manifest(job)
+        with self.assertRaises(WorkflowError):
+            self.submit(job, manifest)
+        manifest["source_root"] = str(root)
+        self.assertEqual(self.submit(job, manifest)["status"], "completed")
+        self.assertTrue(jobs.completed_context(self.store, "T1")[0]["is_source_current"])
+        self.assertEqual(jobs.resume_completed(self.store)[0]["task_id"], "T1")
+        self.assertEqual(self.store.task("T1")["status"], "rework")
+        (root / "feature.txt").write_text("Changed after native observation")
+        self.assertFalse(jobs.completed_context(self.store, "T1")[0]["is_source_current"])
 
     def test_claim_waits_for_source_boundary_and_checks_project_and_owner(self):
         job = self.request()

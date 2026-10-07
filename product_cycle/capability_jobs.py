@@ -35,6 +35,23 @@ def migrate(db):
           thread_id TEXT, bound_at TEXT, completed_at TEXT, manifest TEXT, reason TEXT,
           consumed_at TEXT, UNIQUE(source_run_id,client_key));
     """)
+    if "source_root" not in {row[1] for row in db.execute("PRAGMA table_info(capability_jobs)")}:
+        db.execute("ALTER TABLE capability_jobs ADD COLUMN source_root TEXT")
+    if "resource_key" not in {row[1] for row in db.execute("PRAGMA table_info(capability_jobs)")}:
+        db.execute("ALTER TABLE capability_jobs ADD COLUMN resource_key TEXT")
+    db.commit()
+
+
+def resource_in_use(store, resource, exclude=None):
+    return bool(resource and store.db.execute("""SELECT id FROM capability_jobs WHERE resource_key=?
+        AND status IN ('claimed','bound','unknown') AND id!=? LIMIT 1""", (resource, exclude or "")).fetchone())
+
+
+def _source(store, job):
+    source = Path(job.get("source_root") or store.project).resolve()
+    require(source == store.task_source(job["task_id"]) and source.is_dir(),
+            "Source được giao cho công cụ đã thay đổi hoặc không còn tồn tại; cần đối chiếu yêu cầu.")
+    return source
 
 
 def _text(value, message):
@@ -48,6 +65,7 @@ def _read(store, job_id):
         WHERE j.id=?""", (job_id,)).fetchone()
     require(row is not None, "Không tìm thấy yêu cầu công cụ.")
     job = dict(row)
+    job["source_root"] = job.get("source_root") or str(store.project)
     job["manifest"] = json.loads(job["manifest"]) if job["manifest"] else None
     job["capability_name"] = CAPABILITIES[job["capability"]]
     job["is_current"] = job["revision"] == job["current_revision"]
@@ -103,9 +121,10 @@ def request(store, run, capability, prompt, client_key):
             return job
         job_id = "capability-" + uuid.uuid4().hex
         store.db.execute("""INSERT INTO capability_jobs(id,source_run_id,source_agent_id,task_id,
-            revision,capability,prompt,client_key,source_fingerprint,status,created_at)
-            VALUES(?,?,?,?,?,?,?,?,?,'queued',?)""", (job_id, origin["id"], origin["agent_id"],
-            origin["task_id"], origin["revision"], capability, prompt, client_key, fingerprint(store.project), now()))
+            revision,capability,prompt,client_key,source_fingerprint,status,created_at,source_root,resource_key)
+            VALUES(?,?,?,?,?,?,?,?,?,'queued',?,?,?)""", (job_id, origin["id"], origin["agent_id"],
+            origin["task_id"], origin["revision"], capability, prompt, client_key, store.task_fingerprint(origin["task_id"]), now(),
+            str(store.task_source(origin["task_id"])), origin["resource_key"]))
         job = _read(store, job_id)
         _event(store, job, "requested", capability=capability)
         return job
@@ -132,9 +151,11 @@ def expire(store):
                                 + " LIMIT 1").fetchone():
             queued = store.db.execute("""SELECT j.id FROM capability_jobs j JOIN tasks t ON t.id=j.task_id
                 WHERE j.status='queued' AND j.revision=t.revision""").fetchall()
-            current_source = fingerprint(store.project) if queued else None
             for row in queued:
                 job = _read(store, row["id"])
+                if not _idle(store, job):
+                    continue
+                current_source = fingerprint(_source(store, job))
                 if job["source_fingerprint"] == current_source:
                     continue
                 store.db.execute("UPDATE capability_jobs SET status='cancelled',reason=? WHERE id=?",
@@ -175,7 +196,10 @@ def claim(store, job_id, actor, project, ttl_seconds=1800):
                 and _idle(store, job), "Chờ phiên thực hiện dừng ở yêu cầu công cụ trước khi nhận công việc.")
         require(not store.db.execute("SELECT 1 FROM team_runs WHERE source_writer=1 AND status IN " + ACTIVE
                                      + " LIMIT 1").fetchone(), "Chờ phiên đang thay đổi sản phẩm hoàn tất trước khi nhận công cụ.")
-        require(job["source_fingerprint"] == fingerprint(store.project),
+        require(not resource_in_use(store, job["resource_key"], job["id"])
+                and (not job["resource_key"] or not store.db.execute("SELECT id FROM team_runs WHERE resource_key=? AND status IN " + ACTIVE, (job["resource_key"],)).fetchone()),
+                "Chờ instance dùng chung kết thúc hoặc được đối chiếu trước khi nhận công cụ.")
+        require(job["source_fingerprint"] == fingerprint(_source(store, job)),
                 "Sản phẩm đã thay đổi; cần yêu cầu công cụ cho phiên bản hiện tại.")
         store.db.execute("""UPDATE capability_jobs SET status='claimed',actor=?,claimed_at=?,expires_at=?
             WHERE id=?""", (actor, now(), time.time() + ttl_seconds, job_id))
@@ -194,13 +218,14 @@ def bind(store, job_id, actor, thread_id, client_factory=CodexClient):
     with client_factory(store.project / ".product-cycle" / "capabilities" / job_id) as client:
         thread = client.read_thread(thread_id)
     require(thread.get("id") == thread_id and isinstance(thread.get("cwd"), str)
-            and Path(thread["cwd"]).resolve() == store.project, "Chat Codex cần thuộc đúng dự án này.")
+            and Path(thread["cwd"]).resolve() in {store.project, _source(store, job)},
+            "Chat Codex cần thuộc đúng dự án hoặc workspace được giao.")
     with store.db:
         store.db.execute("BEGIN IMMEDIATE")
         job = _read(store, job_id)
         require(job["is_current"] and job["status"] in {"claimed", "bound"} and job["actor"] == actor
                 and job["expires_at"] > time.time(), "Yêu cầu nhận công việc đã thay đổi.")
-        require(_idle(store, job) and job["source_fingerprint"] == fingerprint(store.project),
+        require(_idle(store, job) and job["source_fingerprint"] == fingerprint(_source(store, job)),
                 "Công việc hoặc phiên bản sản phẩm đã thay đổi; hãy đọc lại yêu cầu hiện tại.")
         require(not job["thread_id"] or job["thread_id"] == thread_id, "Công việc đã gắn với chat khác.")
         require(not store.db.execute("""SELECT 1 FROM capability_jobs WHERE thread_id=? AND id!=?
@@ -220,8 +245,10 @@ def bind(store, job_id, actor, thread_id, client_factory=CodexClient):
 def _validate_manifest(store, job, manifest):
     require(isinstance(manifest, dict), "Cần gửi danh sách kết quả thực tế của công cụ.")
     require(manifest.get("source_fingerprint") == job["source_fingerprint"]
-            and fingerprint(store.project) == job["source_fingerprint"],
+            and fingerprint(_source(store, job)) == job["source_fingerprint"],
             "Kết quả cần gắn với đúng phiên bản sản phẩm đã yêu cầu.")
+    require(manifest.get("source_root", str(store.project)) == str(_source(store, job)),
+            "Kết quả công cụ cần ghi đúng source_root đã được giao.")
     observations = manifest.get("observations")
     require(isinstance(observations, list) and observations
             and all(isinstance(item, str) and item.strip() for item in observations),
@@ -301,7 +328,7 @@ def _register_browser(store, job, manifest):
     task = store.task(job["task_id"])
     require(task["stage"] == "verify" and task["status"] in {"blocked", "reviewing", "running"}
             and task["attempts"] > 0 and task["revision"] == job["revision"]
-            and fingerprint(store.project) == job["source_fingerprint"],
+            and fingerprint(_source(store, job)) == job["source_fingerprint"],
             "Cần phiên nghiệm thu hiện tại cho đúng phiên bản đã quan sát.")
     # The same source version can reuse real observations in a later verify attempt.
     require(set(browser["requirements"]) <= store.requirement_ids(), "Các yêu cầu được kiểm chứng đã thay đổi.")
@@ -350,8 +377,8 @@ def register_browser_evidence(store, job_id):
 def completed_context(store, task_id):
     """Expose completed current-revision outputs and immutable paths to workers."""
     task = store.task(task_id)
-    current = fingerprint(store.project)
-    return [dict(job, is_source_current=job["source_fingerprint"] == current,
+    current = store.task_fingerprint(task)
+    return [dict(job, is_source_current=job["source_fingerprint"] == current and job["source_root"] == str(store.task_source(task)),
                  artifact_paths=[str(store.root / item["object_path"]) for item in job["manifest"]["artifacts"]])
             for job in (_read(store, row["id"]) for row in store.db.execute(
                 "SELECT id FROM capability_jobs WHERE task_id=? AND revision=? AND status='completed' ORDER BY rowid",
@@ -397,7 +424,7 @@ def fulfill(store, job_id, actor, thread_id, manifest):
         current = _read(store, job_id)
         require(current["is_current"] and current["status"] in {"bound", "unknown"}
                 and current["actor"] == actor and current["thread_id"] == thread_id
-                and _idle(store, current) and fingerprint(store.project) == job["source_fingerprint"],
+                and _idle(store, current) and fingerprint(_source(store, job)) == job["source_fingerprint"],
                 "Công việc hoặc phiên bản đã thay đổi trước khi lưu kết quả công cụ.")
         store.db.execute("UPDATE capability_jobs SET status='completed',manifest=?,completed_at=?,reason=NULL WHERE id=?",
                          (json.dumps(validated, ensure_ascii=False), now(), job_id))
@@ -439,7 +466,7 @@ def resume_completed(store, task_id=None):
                 LEFT JOIN attempts a ON a.id=r.attempt_id WHERE j.task_id=? AND j.revision=? AND j.consumed_at IS NULL
                 AND (r.attempt_id IS NULL OR (a.number=? AND a.revision=?))""",
                 (task["id"], task["revision"], task["attempts"], task["revision"])).fetchall()
-            if not current or any(job["source_fingerprint"] != fingerprint(store.project) for job in jobs):
+            if not current or any(job["source_fingerprint"] != fingerprint(_source(store, job)) for job in jobs):
                 continue
             ids = [row["id"] for row in current]
             from .team_discussions import pending, BLOCKER_PREFIX as discussion_prefix

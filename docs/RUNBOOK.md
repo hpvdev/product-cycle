@@ -51,7 +51,7 @@ Dừng worker và server của project, rồi cập nhật bản clone dùng đ�
 
 ## Các bước nhỏ và mốc thiết kế
 
-Dự án mới hiển thị 9 bước lớn; chuẩn bị project/common là công việc bên trong Phát triển, cấu hình dịch vụ có nhóm riêng; các dự án cũ giữ cấu hình giai đoạn phù hợp. Dashboard hiển thị danh sách đầu việc trong plan ngay khi có đầu ra dự kiến, cùng các bước nhỏ, kiểm tra theo kế hoạch, review và điểm quyết định. Trước khi plan được chấp nhận, phần phát triển hiển thị các bước dự kiến; sau đó mỗi công việc có tiến độ riêng. Tiến độ là tỷ lệ bước được xác nhận, không phải ước lượng thời gian. Số bước có thể tăng khi công việc hoặc lệnh kiểm tra được mở rộng.
+Dự án live mới có thêm bước Feature Map và Tích hợp; chuẩn bị project/common là công việc bên trong Phát triển, cấu hình dịch vụ có nhóm riêng; các dự án cũ giữ cấu hình giai đoạn phù hợp. Dashboard hiển thị danh sách đầu việc trong plan ngay khi có đầu ra dự kiến, cùng các bước nhỏ, kiểm tra theo kế hoạch, review và điểm quyết định. Trước khi plan được chấp nhận, phần phát triển hiển thị các bước dự kiến; sau đó mỗi công việc có tiến độ riêng. Tiến độ là tỷ lệ bước được xác nhận, không phải ước lượng thời gian. Số bước có thể tăng khi công việc hoặc lệnh kiểm tra được mở rộng.
 
 Worker dùng `update_plan` khi công cụ sẵn có và giữ mã S1, S2... trong tên bước để truyền tiến độ trực tiếp. Báo completed chỉ hiển thị “Chờ kiểm chứng”. Mỗi bước cần đầu ra liên kết trong work result; reviewer đánh giá riêng bằng bằng chứng. Nếu runtime không gửi cập nhật kế hoạch, các bước chưa có báo cáo giữ trạng thái chờ cho đến khi kết quả về, không tự suy diễn bước đang chạy. Controller xác nhận kiểm tra và quyết định theo dữ liệu thực tế. Phiên cũ không có dữ liệu từng bước hiển thị “Chưa ghi chi tiết”; mở lại tạo revision mới và giữ nguyên lịch sử.
 
@@ -65,7 +65,7 @@ Trong các dashboard cũ cho phép điều khiển, nút “Tiếp tục quy tr�
 
 Tiêu chí của đầu việc phải hoàn thành được trong phạm vi và các phụ thuộc đã xong; không yêu cầu chức năng của đầu việc phía sau. `browser_required` đặt ở cấp kế hoạch và áp dụng tại verify, sau các increment cần thiết. Giữ kiểm chứng browser thực tế cho nghiệm thu toàn sản phẩm; hoàn tất coding/review từng increment không thay thế nghiệm thu này. Kết quả bị chặn vẫn giữ đầu ra và lý do cụ thể trong lịch sử, không được coi là hoàn tất.
 
-Dự án mới có gate tại phân tích, UX/UI, mốc trải nghiệm cốt lõi và handoff và review độc lập ở từng giai đoạn trước đó. Design tạo `design.md`, `design-baseline.json` cùng bộ ảnh đăng ký theo từng màn hình, trạng thái và kích thước. Baseline chứa luồng, trạng thái, quy tắc và tiêu chí nghiệm thu. Baseline được review rồi chủ sản phẩm chốt trong Codex trước bước kỹ thuật và coding. Product Design/Image Gen chỉ được sử dụng nếu worker runtime có công cụ tương ứng; việc plugin có sẵn trong desktop không tự cấp nó cho app-server. Ghi rõ khả năng thiếu hoặc dùng reference đã chọn. Không có UI thì ghi hợp đồng tương tác phù hợp. Dự án cũ giữ nguyên gate và hợp đồng của kết quả đã niêm phong.
+Gate tại phân tích, UX/UI, mốc trải nghiệm và handoff theo chế độ đã chọn; review độc lập vẫn bắt buộc. Design tạo `design.md`, `design-baseline.json` cùng bộ ảnh đăng ký theo từng màn hình, trạng thái và kích thước. Baseline chứa luồng, trạng thái, quy tắc và tiêu chí nghiệm thu. Baseline được review và chấp nhận theo chính sách trước bước kỹ thuật và coding. Product Design/Image Gen chỉ được sử dụng nếu worker runtime có công cụ tương ứng; việc plugin có sẵn trong desktop không tự cấp nó cho app-server. Ghi rõ khả năng thiếu hoặc dùng reference đã chọn. Không có UI thì ghi hợp đồng tương tác phù hợp. Dự án cũ giữ nguyên gate và hợp đồng của kết quả đã niêm phong.
 
 ## Model và giới hạn
 
@@ -162,3 +162,15 @@ Dự án mới bật `screen_design_required: true`. Hợp đồng trong [screen
 Mục **Quy trình** nối giai đoạn → công việc → bước nhỏ; nét đứt là phụ thuộc thật giữa công việc. Có kéo nền, thu phóng, vừa khung, toàn màn hình, ẩn/hiện thanh trái và chi tiết phải. Mục **Màn hình & luồng** hiển thị ảnh từng trạng thái và đường chuyển; chọn một ảnh để xem mẫu cạnh ảnh giao diện thật và công việc liên quan. Dashboard đọc bằng chứng đã ghi, không tự tạo quyết định duyệt.
 
 Cycle cũ không tự đổi hợp đồng hoặc ghi lại lịch sử thành đã duyệt bộ ảnh. Nếu chưa có `screens`, dashboard báo rõ thiếu bộ ảnh. Để áp dụng cho cycle cũ, cài cập nhật workflow theo quy tắc giữ file hiện có, bật `screen_design_required` rồi mở lại Design và các phần phụ thuộc trong Codex; phải tạo và duyệt bộ thiết kế mới trước khi chạy kế hoạch mới. Không sửa bằng chứng đã niêm phong để lấp phần thiếu.
+
+## Nâng cấp agent workflow và chọn runtime
+
+Cycle cũ giữ hợp đồng cũ. Dừng phiên đang chạy và đối chiếu unknown outcomes trước khi dùng upgrade-workflow; mặc định lệnh chỉ preview, --apply mới nâng cấp. Các bước kỹ thuật trở đi bị stale để tạo verification contract, feature map và integration evidence mới; không dùng kết quả cũ để tự thông qua hợp đồng mới. Không cần đổi model/gate đã chọn.
+
+configure --workspace-mode isolated cho feature builder làm trong worktree riêng. Controller giữ dirty/untracked baseline, phát hiện xung đột trước khi tích hợp và bảo toàn các phiên bản để sửa/review lại. Không xóa workspace tạo dở hay unlanded changes để đạt trạng thái sạch. Native tool jobs trả source_root; kiểm chứng đúng instance chạy source đó.
+
+configure --routing-file /absolute/profiles.json chọn profile có executor, capabilities, models và domain/complexity tùy chọn. Plan execution có thể chọn profile/capability/consultants; thiếu capability phải chờ, không tự đổi model family. Với verification environment.instance_policy=exclusive, supervisor tuần tự hóa những mission cùng runtime/device và giữ reservation khi unknown. isolated đòi hỏi instance/port/data riêng.
+
+configure --share-learned-guidance on cho phép guidance đã áp dụng và review được lưu cho project cài mới trên máy. Mặc định off; không đồng bộ vào project đã cài. Rollback rút phiên bản khỏi registry và bảo vệ tùy chỉnh hiện có.
+
+Khi learning trial bị mất phản hồi, dừng supervisor rồi dùng `company-improvements --project /absolute/product --reconcile-trials`. Lệnh chỉ đọc đúng thread/turn đã ghi, niêm phong output thật nếu phiên đã hoàn tất và giữ unknown nếu danh tính/kết quả chưa xác nhận. Chỉ evaluator chưa từng gửi judging turn mới được xếp hàng lại; trial đã hoàn tất được dùng lại, không chạy trùng. Khởi động lại supervisor để tiếp tục phần còn thiếu.

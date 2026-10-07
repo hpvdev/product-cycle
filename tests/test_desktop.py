@@ -97,6 +97,12 @@ class DesktopTests(unittest.TestCase):
         self.assertEqual(desktop.latest(self.store, 'analysis')['tokens'], 40)
         self.assertEqual(self.store.snapshot()['tokens'], 40)
 
+    def test_usage_sync_reads_bound_task_without_losing_native_reconciliation(self):
+        request = run_cycle(self.store)
+        desktop.bind(self.store, 'analysis', request['attempt'], 'worker', self.peer(total=100))
+        desktop.sync_usage(self.store, self.peer(total=140))
+        self.assertEqual(desktop.latest(self.store, 'analysis')['tokens'], 40)
+
     def test_owner_feedback_is_revision_scoped_and_does_not_approve(self):
         self.store.owner_input('analysis', 'Owner', 'Do not simplify the desired experience')
         self.assertEqual(self.store.task('analysis')['status'], 'pending')

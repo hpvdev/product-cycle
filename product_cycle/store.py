@@ -95,6 +95,8 @@ class Store:
         self.db.execute("PRAGMA foreign_keys=ON")
         from .team import migrate
         migrate(self.db)
+        from .workspaces import migrate as migrate_workspaces
+        migrate_workspaces(self.db)
 
     @classmethod
     def create(cls, project, brief, name, model=None, effort=None, mode="live", team=False,
@@ -116,7 +118,7 @@ class Store:
         config = defaults(model, effort)
         config.update({"name": name, "mode": mode, "created_at": now(), "awaiting_request": awaiting_request})
         if mode == "demo":
-            config.update(service_setup_required=False, project_setup_required=False, bootstrap_required=False,
+            config.update(agent_workflow_version=0, service_setup_required=False, project_setup_required=False, bootstrap_required=False,
                           gates=["analysis", "design", "plan", "handoff"],
                           executor="codex-app-server", dashboard_read_only=False,
                           collaborative_product=False, experience_checkpoint_required=False, screen_design_required=False)
@@ -166,7 +168,10 @@ class Store:
         write_json(project / ".product-cycle" / "identity.json", {"id": project_id})
         store = cls(project)
         previous = []
-        stages = ["analysis", "design", "architecture", "plan"]
+        stages = ["analysis", "design", "architecture"]
+        if config.get("agent_workflow_version"):
+            stages += ["feature_map"]
+        stages += ["plan"]
         if config["project_setup_required"]:
             stages += ["project_setup"]
         stages += ["verify", "handoff", "retro"]
@@ -246,6 +251,13 @@ class Store:
         require(row is not None, "Không tìm thấy công việc: " + tid)
         return self.decode(row)
 
+    def task_source(self, task):
+        from .workspaces import task_source
+        return task_source(self, self.task(task) if isinstance(task, str) else task)
+
+    def task_fingerprint(self, task):
+        return fingerprint(self.task_source(task))
+
     def tasks(self):
         return [self.decode(row) for row in self.db.execute("SELECT * FROM tasks ORDER BY rowid")]
 
@@ -324,18 +336,30 @@ class Store:
 
     def begin(self, tid, phase):
         require(not self.config.get("awaiting_request"), "Văn phòng đang chờ yêu cầu; chưa giao công việc cho nhân viên.")
+        from .authority import pending_upgrade
+        require(not pending_upgrade(self), "Nâng cấp workflow bị gián đoạn; chạy upgrade-workflow --apply để đối chiếu trước khi giao việc.")
         self.validate_foundation()
         task = self.task(tid)
         feedback = None
         require(phase in {"work", "review"}, "Giai đoạn thực thi không hợp lệ.")
+        from .dispatch import route
+        selected = route(self, task, phase)
         if phase == "work":
             require(task["status"] in {"pending", "rework", "stale", "blocked"}, "Công việc chưa sẵn sàng thực thi.")
             require(all(self.task(dep)["status"] == "done" for dep in task["deps"]), "Phụ thuộc chưa hoàn tất.")
             require(task["attempts"] < self.config["max_attempts"], "Đã đạt giới hạn số lần thực hiện; cần xác định nguyên nhân trước khi tiếp tục.")
+            from .workspaces import isolated, prepare, integrate
+            if task["role"] in {"build", "integration", "project_setup", "setup"} and not isolated(self, task):
+                from .workspaces import pending_source_transition
+                require(not pending_source_transition(self, task), "Chờ đối chiếu integration đang chuyển tiếp trước khi ghi source chung.")
+            if isolated(self, task):
+                prepare(self, task)
+            if task["stage"] == "integration":
+                integrate(self, task)
             if task["reason"] or task["review"]:
                 feedback = {"reason": task["reason"], "review": task["review"],
                             "previous_outputs": [{"id": item["id"], "path": str(self.root / item["object_path"]),
-                                                   "original_path": item["source"]}
+                                                   "original_path": item["source"], "sha256": item["sha256"]}
                                                   for item in self.current_evidence(tid) if item["kind"] == "artifact"]}
             number = task["attempts"] + 1
             self.update(tid, status="running", attempts=number, reason=None, result=None, review=None)
@@ -350,11 +374,12 @@ class Store:
         aid = tid + ":r" + str(task["revision"]) + ":a" + str(number) + ":" + phase
         if phase == "review":
             aid += ":" + str(reviews + 1)
-        model = self.config["models"]["review" if phase == "review" else task["role"]]
+        model = {key: selected[key] for key in ("model", "effort")}
         with self.db:
             self.db.execute("INSERT INTO attempts(id,task_id,revision,number,phase,requested_model,requested_effort,status,started_at,directory) VALUES(?,?,?,?,?,?,?,?,?,?)",
                             (aid, tid, task["revision"], number, phase, model["model"], model["effort"], "running", now(), str(directory)))
         self.event(tid, "attempt.started", {"id": aid, "phase": phase, "feedback": feedback, **model})
+        self.event(tid, "dispatch.selected", {"attempt_id": aid, **selected})
         if self.config.get("bootstrap_required"):
             self.event(tid, "repository.observed", {"attempt_id": aid, **repository_state(self.project)})
         if phase == "work":
@@ -399,6 +424,9 @@ class Store:
                 "Cần mô tả cụ thể vấn đề đang chặn và phần cần xử lý.")
         require(isinstance(result.get("limitations"), list), "Kết quả cần khai báo giới hạn.")
         directory = self.latest_directory(tid)
+        if self.config.get("agent_workflow_version"):
+            from .context_packs import validate_pack
+            validate_pack(self, task, directory)
         paths = []
         for item in result["artifacts"]:
             require(isinstance(item, dict) and isinstance(item.get("purpose"), str) and item["purpose"].strip(), "Đầu ra cần có mục đích.")
@@ -427,6 +455,13 @@ class Store:
             filenames = filenames + ["services.json"]
         if self.config.get("project_setup_required") and task["stage"] == "architecture":
             filenames = filenames + ["project-setup.json"]
+        if self.config.get("agent_workflow_version"):
+            if task["stage"] == "architecture":
+                filenames += ["verification.json"]
+            if task["role"] in {"build", "integration", "verify"} and not result.get("blocker"):
+                filenames += ["runtime-observations.json"]
+            if task["stage"] == "integration" and not result.get("blocker"):
+                filenames += ["feature-map-update.json"]
         if task["stage"] == "design" and not tracking and steps is None and not self.config.get("screen_design_required"):
             filenames = ["design.md"]
         for filename in filenames:
@@ -453,6 +488,9 @@ class Store:
         if task["stage"] == "plan":
             plan = json_object(directory / "plan.json")
             validate_plan(plan, self.requirement_ids())
+            if self.config.get("agent_workflow_version"):
+                from .features import validate_feature_plan
+                validate_feature_plan(plan, self.sealed_document("feature_map", "feature-map.json"))
             if self.config.get("screen_design_required"):
                 from .screens import validate_screen_plan
                 validate_screen_plan(plan, self.sealed_document("design", "design-baseline.json"))
@@ -465,6 +503,26 @@ class Store:
             validate_services(json_object(directory / "services.json"))
         if task["stage"] == "architecture" and self.config.get("project_setup_required"):
             validate_project_setup(json_object(directory / "project-setup.json"))
+        if self.config.get("agent_workflow_version"):
+            from .features import validate_verification, validate_feature_map, validate_runtime_report, validate_feature_update
+            if task["stage"] == "architecture":
+                validate_verification(json_object(directory / "verification.json"))
+            if task["stage"] == "feature_map":
+                validate_feature_map(json_object(directory / "feature-map.json"), self.requirement_ids(),
+                                     self.sealed_document("design", "design-baseline.json"),
+                                     self.sealed_document("architecture", "verification.json"))
+            runtime = directory / "runtime-observations.json"
+            if task["role"] in {"build", "integration", "verify"} and runtime in paths:
+                rows = validate_runtime_report(self, task, json_object(runtime),
+                                               {item["path"] for item in result["artifacts"]}, self.task_fingerprint(task))
+                require(result.get("blocker") or all(row["status"] == "pass" for row in rows),
+                        "Runtime chưa PASS; ghi blocker và sửa hoặc chờ điều kiện cần thiết.")
+                if task["stage"] == "verify" and not result.get("blocker"):
+                    report = json_object(runtime)
+                    require(all(value["status"] in {"pass", "not_applicable"} for value in report["whole_product"].values()),
+                            "Whole-product chưa PASS; cần sửa hoặc ghi điều đang chặn.")
+            if task["stage"] == "integration" and not result.get("blocker"):
+                validate_feature_update(self, task, json_object(directory / "feature-map-update.json"), self.task_source(task))
         if task["role"] == "project_setup":
             require(self.project / "CODING_RULES.md" in paths, "Cần coding rules của dự án trước khi triển khai tính năng.")
             setup = self.project_setup_contract()
@@ -475,6 +533,12 @@ class Store:
         if task["stage"] == "retro":
             retro = json_object(directory / "retro.json")
             require(isinstance(retro.get("observations"), list) and isinstance(retro.get("improvements"), list), "Retro cần quan sát và đề xuất cải thiện.")
+            if self.config.get("agent_workflow_version"):
+                known = {row[0] for row in self.db.execute("SELECT id FROM evidence")}
+                require(all(isinstance(item, dict) and isinstance(item.get("finding"), str) and item["finding"].strip()
+                            and isinstance(item.get("evidence_ids"), list) and item["evidence_ids"]
+                            and set(item["evidence_ids"]) <= known for item in retro["observations"]),
+                        "Retro observations cần finding và bằng chứng đã đăng ký.")
             for improvement in retro["improvements"]:
                 require(isinstance(improvement, dict) and improvement.get("change") and improvement.get("eval_case") and improvement.get("evidence_ids"), "Đề xuất retro cần bằng chứng và tình huống đánh giá.")
                 known = {row[0] for row in self.db.execute("SELECT id FROM evidence")}
@@ -483,7 +547,7 @@ class Store:
                 case = improvement["eval_case"]
                 require(isinstance(case, dict) and isinstance(case.get("input"), str) and case["input"].strip() and
                         isinstance(case.get("expected"), str) and case["expected"].strip(), "Tình huống đánh giá cần input và expected rõ ràng.")
-        if self.config.get("screen_design_required") and task["role"] in {"build", "verify"}:
+        if self.config.get("screen_design_required") and task["role"] in {"build", "integration", "verify"}:
             targets = self.screen_targets(tid)
             report_path = directory / "screen-comparisons.json"
             if targets and (not result.get("blocker") or report_path in paths):
@@ -491,20 +555,20 @@ class Store:
                 require(report_path in paths, "Cần lưu ảnh giao diện thật và kết quả đối chiếu với mẫu đã duyệt.")
                 baseline = self.sealed_document("design", "design-baseline.json")
                 validate_screen_comparisons(json_object(report_path), baseline, targets,
-                    dict(zip((item["path"] for item in result["artifacts"]), paths)), fingerprint(self.project), digest,
+                    dict(zip((item["path"] for item in result["artifacts"]), paths)), self.task_fingerprint(task), digest,
                     {record["source"]: record for record in self.current_evidence("design")}, bool(result.get("blocker")))
         return paths
 
     def screen_targets(self, tid):
         from .screens import design_targets, target_key
         task = self.task(tid)
-        if not self.config.get("screen_design_required") or task["role"] not in {"build", "verify"}:
+        if not self.config.get("screen_design_required") or task["role"] not in {"build", "integration", "verify"}:
             return []
         baseline = self.sealed_document("design", "design-baseline.json")
         targets = design_targets(baseline)
-        if task["role"] == "build":
+        if task["role"] in {"build", "integration"}:
             plan = self.approved_plan()
-            item = next(item for item in plan["tasks"] if item["id"] == tid)
+            item = next(item for item in plan["tasks"] if item["id"] == tid.removeprefix("integrate-"))
             selected = {target_key(target) for target in item["screen_targets"]}
             targets = [target for target in targets if target_key(target) in selected]
         return targets
@@ -567,7 +631,7 @@ class Store:
         self.attempt_update(aid, status="completed", ended_at=now())
         blocked = bool(result.get("blocker"))
         self.update(tid, result=result, status="blocked" if blocked else "reviewing",
-                    reason=result.get("blocker"), fingerprint=fingerprint(self.project))
+                    reason=result.get("blocker"), fingerprint=self.task_fingerprint(task))
         self.event(tid, "work.completed", {"summary": result["summary"], "revision": task["revision"]})
         if self.config.get("bootstrap_required"):
             self.event(tid, "repository.observed", {"attempt_id": aid, "phase": "work_finished", **repository_state(self.project)})
@@ -595,7 +659,16 @@ class Store:
             require(row.get("passed") is True and isinstance(row.get("evidence"), list) and row["evidence"] and
                     all(isinstance(eid, str) and eid in evidence_ids for eid in row["evidence"]) and row.get("reason"), "Tiêu chí chưa đạt hoặc chưa có bằng chứng hợp lệ.")
             require(any(row["id"] in item["criteria"] for item in records if item["id"] in row["evidence"]), "Bằng chứng chưa liên kết với tiêu chí được review.")
-        if self.config.get("screen_design_required") and task["role"] in {"build", "verify"} and self.screen_targets(tid):
+        if self.config.get("agent_workflow_version") and task["role"] in {"build", "integration", "verify"}:
+            self.validate_outputs(tid, task["result"])
+            report = self.sealed_document(tid, "runtime-observations.json")
+            sources = {path for feature in report["features"] for observation in feature["observations"] for path in observation["evidence"]}
+            sources.update(path for value in report.get("whole_product", {}).values() for path in value.get("evidence", []))
+            sources.add(str(self.latest_directory(tid).relative_to(self.project) / "runtime-observations.json"))
+            cited = {eid for row in rows for eid in row["evidence"]}
+            require({item["id"] for item in records if item["source"] in sources} <= cited,
+                    "Review cần dẫn báo cáo runtime và bằng chứng thực tế của tính năng.")
+        if self.config.get("screen_design_required") and task["role"] in {"build", "integration", "verify"} and self.screen_targets(tid):
             self.validate_outputs(tid, task["result"])
             report = self.sealed_document(tid, "screen-comparisons.json")
             required_sources = {row["rendered_image"] for row in report["comparisons"]}
@@ -621,7 +694,7 @@ class Store:
             matching = [json_object(self.root / item["object_path"]) for item in checks]
             require(any(item.get("argv") == command and item.get("exit_code") == 0 and
                         item.get("source_fingerprint") == task["fingerprint"] for item in matching), "Lệnh kiểm tra chưa thành công trên phiên bản hiện tại.")
-        require(task["fingerprint"] == fingerprint(self.project), "Sản phẩm thay đổi sau khi kiểm chứng; cần thực hiện lại kiểm tra.")
+        require(task["fingerprint"] == self.task_fingerprint(task), "Sản phẩm thay đổi sau khi kiểm chứng; cần thực hiện lại kiểm tra.")
         if task["stage"] == "verify" and self.approved_plan().get("browser_required", False):
             browser_records = [json_object(self.root / item["object_path"]) for item in records if item["kind"] == "browser" and item["producer"] == "operator"]
             covered = {rid for item in browser_records if item.get("source_fingerprint") == task["fingerprint"] for rid in item.get("requirements", [])}
@@ -633,7 +706,7 @@ class Store:
             self.validate_review("verify", verify["review"])
 
     def check_commands(self, task):
-        if task["stage"] in {"build", "setup", "project_setup"}:
+        if task["stage"] in {"build", "integration", "setup", "project_setup"}:
             return task["checks"]
         if task["stage"] == "verify":
             plan = self.approved_plan()
@@ -693,6 +766,13 @@ class Store:
                             "title": "Cấu hình " + service["provider"], "instructions": service["configuration"],
                             "depends_on": [], "requirements": [], "criteria": CRITERIA["setup"],
                             "checks": service["checks"]} for service in services]
+            integrations = []
+            if self.config.get("agent_workflow_version"):
+                integrations = [{"id": "integrate-" + item["id"], "stage": "integration",
+                    "title": "Tích hợp " + item["title"],
+                    "instructions": "Verify controller-integrated changes for " + item["id"] + ". " + item["instructions"],
+                    "depends_on": [item["id"]], "requirements": item["requirements"],
+                    "criteria": CRITERIA["integration"], "checks": item.get("checks", [])} for item in tasks]
             # Avoid partial expansion: all inserts and dependencies commit together.
             with self.db:
                 base = ["plan"]
@@ -701,9 +781,10 @@ class Store:
                     self.db.execute("UPDATE tasks SET instructions=?,checks=? WHERE id='project_setup'",
                                     (setup["instructions"], json.dumps(setup["checks"])))
                     base += ["project_setup"]
-                self.db.execute("UPDATE tasks SET status='superseded' WHERE stage IN ('build','setup') AND id != 'project_setup'")
-                for item in setup_tasks + tasks:
-                    deps = base + item["depends_on"] + ["setup-" + sid for sid in item.get("services", [])]
+                self.db.execute("UPDATE tasks SET status='superseded' WHERE stage IN ('build','setup','integration') AND id != 'project_setup'")
+                for item in setup_tasks + tasks + integrations:
+                    prerequisites = ["integrate-" + dep for dep in item["depends_on"]] if integrations and item in tasks else item["depends_on"]
+                    deps = base + prerequisites + ["setup-" + sid for sid in item.get("services", [])]
                     existing = self.db.execute("SELECT id FROM tasks WHERE id=?", (item["id"],)).fetchone()
                     if existing:
                         self.db.execute("UPDATE tasks SET title=?,instructions=?,deps=?,criteria=?,requirements=?,checks=?,status='pending' WHERE id=?",
@@ -713,7 +794,7 @@ class Store:
                         self.db.execute("INSERT INTO tasks(id,stage,title,instructions,deps,criteria,requirements,checks,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
                                     (item["id"], item.get("stage", "build"), item["title"], item["instructions"], json.dumps(deps),
                                      json.dumps(item["criteria"]), json.dumps(item["requirements"]), json.dumps(item.get("checks", [])), "pending", now()))
-                self.db.execute("UPDATE tasks SET deps=? WHERE id='verify'", (json.dumps([item["id"] for item in tasks]),))
+                self.db.execute("UPDATE tasks SET deps=? WHERE id='verify'", (json.dumps([item["id"] for item in integrations or tasks]),))
             config = self.config
             if config.get("team", {}).get("policy") == "autonomous":
                 assignments = dict(config["team"].get("task_agents", {}))
@@ -722,9 +803,15 @@ class Store:
             config["verification_commands"] = plan.get("verification_commands", [])
             config["browser_required"] = plan.get("browser_required", False)
             checkpoint = plan.get("experience_checkpoint")
-            config["task_gates"] = [checkpoint["task_id"]] if self.config.get("experience_checkpoint_required") else []
+            config["task_gates"] = [("integrate-" if integrations else "") + checkpoint["task_id"]] if self.config.get("experience_checkpoint_required") else []
             write_json(self.root / "config.json", config)
         self.update(tid, status="done", accepted_at=now())
+        if task["stage"] == "retro" and self.config.get("agent_workflow_version"):
+            from .knowledge import extract
+            extract(self, self.task(tid))
+        if task["role"] == "build":
+            from .workspaces import mark_reviewed
+            mark_reviewed(self, task)
         self.event(tid, "task.accepted", {"revision": task["revision"]})
 
     def decide(self, tid, action, actor, note):
@@ -935,15 +1022,14 @@ class Store:
                             reference["evidence_id"] = next((item["id"] for item in current if item["source"] == reference["image"]), None)
                         for asset in screen["assets"]:
                             asset["evidence_id"] = next((item["id"] for item in current if item["source"] == asset["path"]), None)
-            if task["role"] in {"build", "verify"} and self.task("plan")["status"] == "done" and task["status"] != "superseded":
+            if task["role"] in {"build", "integration", "verify"} and self.task("plan")["status"] == "done" and task["status"] != "superseded":
                 task["screen_targets"] = self.screen_targets(task["id"])
                 current = self.current_evidence(task["id"])
                 report = next((item for item in current if Path(item["source"]).name == "screen-comparisons.json"), None)
                 if report:
                     task["screen_comparisons"] = json_object(self.root / report["object_path"])
                     task["screen_comparisons"]["evidence_id"] = report["id"]
-                    if current_source is None:
-                        current_source = fingerprint(self.project)
+                    current_source = self.task_fingerprint(task)
                     task["screen_comparisons"]["current_source"] = task["screen_comparisons"].get("source_fingerprint") == current_source
                     for row in task["screen_comparisons"]["comparisons"]:
                         row["evidence_id"] = next((item["id"] for item in current if item["source"] == row["rendered_image"]), None)
@@ -968,7 +1054,13 @@ class Store:
                      for task in tasks if task["stage"] == "setup" and task["result"] and task["status"] != "superseded"}
         cycle_state = self.db.execute("SELECT value FROM meta WHERE key='state'").fetchone()[0]
         from .team import TeamStore
+        from .supervision import summary
+        observed_tokens = [self.db.execute("SELECT SUM(tokens) FROM attempts").fetchone()[0],
+                           self.db.execute("SELECT SUM(total_tokens) FROM team_usage WHERE attempt_id IS NULL").fetchone()[0]]
+        if self.db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='improvement_trials'").fetchone():
+            observed_tokens.append(self.db.execute("SELECT SUM(tokens) FROM improvement_trials").fetchone()[0])
         return {"config": config, "project": str(self.project), "team": TeamStore(self).snapshot(),
+                "coordinator": summary(self),
                 "foundation": self.foundation(),
                 "state": cycle_state,
                 "tasks": tasks, "stages": stage_progress(tasks, config), "events": events,
@@ -980,7 +1072,7 @@ class Store:
                              "verification_status": self.task("verify")["status"],
                              "acceptance_status": self.task("handoff")["status"],
                              "release_deferred": config.get("release_deferred", True)},
-                "tokens": self.db.execute("SELECT SUM(tokens) FROM attempts").fetchone()[0],
+                "tokens": sum(value or 0 for value in observed_tokens) if any(value is not None for value in observed_tokens) else None,
                 "token_tracking": {"complete": not any(a[0] is None for a in self.db.execute("SELECT tokens FROM attempts")),
                                    "work": self.db.execute("SELECT SUM(tokens) FROM attempts WHERE phase='work'").fetchone()[0],
                                    "review": self.db.execute("SELECT SUM(tokens) FROM attempts WHERE phase='review'").fetchone()[0]},

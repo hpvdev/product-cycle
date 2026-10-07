@@ -26,10 +26,22 @@ Python 3.9+, thư viện chuẩn, SQLite WAL, HTTP cục bộ. Codex dùng đăn
 
 Không sửa cấu hình Codex toàn cục. App Server truyền model, effort, cwd, policy, sandbox từng phiên. Native handoff ghi cấu hình yêu cầu; phiên Codex chọn model/effort qua khả năng của host khi có, không tự nhận yêu cầu là cấu hình đã áp dụng. Model/effort app-server trả lại và sự kiện rerouting được ghi riêng với cấu hình yêu cầu. Token chưa có số liệu không phải 0; ngân sách token phụ thuộc sự kiện có thể đến trễ. Timeout và số lần thử được giới hạn ở controller.
 
-Lock OS ngăn hai controller đồng thời. Controller chạy tuần tự dù backlog hỗ trợ DAG; không tự tạo worktree. Review dùng phiên mới read-only. Crash: recover → kiểm tra thay đổi → reopen, không tự lặp thao tác chưa rõ kết quả.
+Lock OS ngăn hai controller đồng thời. Runner đơn chạy tuần tự; supervisor đội ngũ điều phối DAG. Agent workflow v1 dùng workspace Git riêng cho builder khi workspace_mode=isolated và một writer tích hợp source chung. Review dùng phiên mới read-only. Crash: recover → kiểm tra thay đổi → reopen, không tự lặp thao tác chưa rõ kết quả.
 
 Lệnh kiểm tra là argv đã duyệt trong plan; kiểm tra kết nối dịch vụ được khai báo trong thiết kế kỹ thuật và liên kết qua plan; controller chạy cục bộ ngoài sandbox Codex. Dùng lệnh tin cậy của repository được chọn. Không publish/deploy/merge là policy trong hướng dẫn và không có endpoint triển khai; gói không phải môi trường cách ly tuyệt đối cho code không tin cậy.
 
 Dashboard bind 127.0.0.1 và chỉ đọc mặc định cho cycle mới. POST bị từ chối khi dashboard_read_only=true. Cycle cũ còn điều khiển phải kiểm tra Host, token và same-origin. Chỉ phục vụ bằng chứng đã đăng ký và đúng hash. HTML/SVG hiển thị như văn bản, không chạy trong dashboard.
 
 Jev là adapter tùy chọn cho câu hỏi ngữ nghĩa trên nội dung người dùng cung cấp rõ ràng. Không tự gửi source, secrets, dữ liệu cá nhân hoặc tài liệu riêng tư. Nhận định Jev không thay kết quả chạy kiểm thử.
+
+## Versioned agent workflow
+
+Authority packets bind selected mode, scope, decisions, gate ownership and budgets. Context packs rank accepted inputs deterministically, preserve sealed provenance and separate reviewer observations from worker claims; owner feedback invalidates an older pack. Authenticated refresh delivers current authority without granting approval.
+
+Architecture defines verification procedures and runtime isolation; feature maps link requirements, design targets, dependencies and procedures. Accepted integration updates compose a maintained observed map while retaining the original planned baseline. The plan DAG waits for prerequisite integrations. Isolated builders/reviewers inspect their assigned source roots; runtime/native evidence is pinned to that root and fingerprint. Shared runtime instances have durable reservations, including unknown outcomes.
+
+Preparation journals retain recorded initial/baseline versions and resume only verified copies. Integration checks all file conflicts before applying a recoverable journal. Unexpected work is retained for repair rather than discarded. Canonical checks and independent integration review precede whole-product acceptance.
+
+Learning keeps project lessons with evidence, runs bounded identical-input trials against immutable skill snapshots and hides variant identities from the judge. Registered held-out cases supplement author cases when available. Only a separately reviewed improvement can apply at a stable point; sharing guidance with future installs is opt-in and existing customizations remain protected. Behavioral efficacy requires actual trial evidence; synthetic controller fixtures establish mechanics only.
+
+Context packs also contain a bounded source/test index and local import graph. Accepted feature entry points rank first, followed by their import neighbors and task-linked path/symbol matches. Python edges use AST parsing; JS/TS/Dart edges are labeled syntax hints. Other languages retain file/test metadata with explicit graph limitations. Compression keeps paths, symbol locations, hashes and original-source access rather than copying whole code files or private skill/account directories into prompts.

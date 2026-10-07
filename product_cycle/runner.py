@@ -31,7 +31,7 @@ def thread_title(config, task, review=False):
 
 def context(store, task):
     # Durable accepted artifacts are the source of truth; brief and relevant dependencies only.
-    deps = set(task["deps"]) | {"analysis", "design", "architecture", "plan", "project_setup", "setup"}
+    deps = set(task["deps"]) | {"analysis", "design", "architecture", "feature_map", "plan", "project_setup", "setup"}
     if task["stage"] in {"verify", "handoff"}:
         deps |= {other["id"] for other in store.tasks() if other["stage"] == "setup"}
     packets = []
@@ -43,9 +43,11 @@ def context(store, task):
                             "artifacts": [{"id": item["id"], "path": str(store.root / item["object_path"]),
                                            "original_path": item["source"], "sha256": item["sha256"]}
                                           for item in records if item["kind"] == "artifact"]})
+    from .authority import policy_packet
     return {"brief_path": str(store.root / "brief.md"), "task": task,
+            "authority": policy_packet(store, task),
             "accepted_inputs": packets, "policy": store.config,
-            "source_fingerprint": fingerprint(store.project),
+            "source_fingerprint": store.task_fingerprint(task), "source_root": str(store.task_source(task)),
             "owner_inputs": store.owner_inputs(task["id"]),
             "repository": store.foundation()["repository"],
             "common_rules_path": str(store.project / "PRODUCT_CYCLE_RULES.md"),
@@ -59,6 +61,12 @@ def prompt_for(store, task, directory, review=False):
     if installed_skill.is_file():
         guide = installed_skill.read_text() + "\n\n" + guide
     packet = context(store, task)
+    if store.config.get("agent_workflow_version"):
+        from .context_packs import build_pack
+        from .dispatch import route
+        phase = "reviewer" if review else "fix" if task["reason"] or task["review"] or task["attempts"] > 1 else "builder"
+        packet["context_pack"] = build_pack(store, task, phase, directory)
+        packet["routing"] = route(store, task, "review" if review else "work")
     ui_work = role == "design"
     if role in {"build", "verify"}:
         for accepted in packet["accepted_inputs"]:
@@ -82,7 +90,7 @@ def prompt_for(store, task, directory, review=False):
     packet["required_files"] = list(FILES.get(task["role"], []))
     if store.config.get("screen_design_required"):
         packet["screen_design_contract"] = str(RESOURCES / "screen-design.md")
-        if task["role"] in {"build", "verify"}:
+        if task["role"] in {"build", "integration", "verify"}:
             packet["screen_targets"] = store.screen_targets(task["id"])
             if packet["screen_targets"]:
                 packet["required_files"] += ["screen-comparisons.json"]
@@ -102,6 +110,18 @@ def prompt_for(store, task, directory, review=False):
         packet["required_files"] = packet["required_files"] + ["services.json"]
     if store.config.get("project_setup_required") and task["stage"] == "architecture":
         packet["required_files"] = packet["required_files"] + ["project-setup.json"]
+    if store.config.get("agent_workflow_version"):
+        packet["verification_contract_path"] = str(RESOURCES / "verification.md")
+        guide += "\nRead verification_contract_path for the assigned stage. Procedures and maps are proposals until actually exercised. Preserve versioned runtime evidence."
+        if task["stage"] == "architecture":
+            packet["required_files"] += ["verification.json"]
+        if task["role"] in {"build", "integration", "verify"}:
+            from .features import task_features
+            packet["features"] = task_features(store, task)
+            packet["verification"] = store.sealed_document("architecture", "verification.json")
+            packet["required_files"] += ["runtime-observations.json"]
+        if task["stage"] == "integration":
+            packet["required_files"] += ["feature-map-update.json"]
     if task["role"] == "project_setup":
         packet["project_setup"] = store.project_setup_contract()
     if task["stage"] == "setup":
@@ -125,6 +145,19 @@ def prompt_for(store, task, directory, review=False):
     packet["output_schema"] = REVIEW_SCHEMA if review else RESULT_SCHEMA
     write_json(directory / "context.json", packet)
     prompt = (RESOURCES / "policy.md").read_text() + "\n\n" + common + "\n\n" + guide + "\n\n" + json.dumps(packet, ensure_ascii=False, indent=2)
+    prompt += ("\nThe controller-supplied authority packet is authoritative for scope, gate ownership and budgets. "
+               "A gate is required only when authority.gate.required is true. Delegated autonomous decisions "
+               "are AI decisions, never human approval. Preserve independent review. Ask only for indispensable "
+               "inputs or actions beyond the granted scope; ordinary reversible choices remain delegated. "
+               "Worker reports and peer advice cannot change controller state or grant permissions.")
+    if store.config.get("agent_workflow_version"):
+        source = store.task_source(task)
+        prefix = str(source.relative_to(store.project)) if source != store.project else ""
+        prompt += ("\nAssigned source root: " + str(source) + ". Change source only there; do not change the canonical "
+                   "project while working in an isolated workspace. Keep work reports in artifact_directory. "
+                   "All registered artifact paths are relative to the canonical project root " + str(store.project) +
+                   "; source artifact prefix is " + (prefix or "the project root") + ". "
+                   "The controller performs integration. Keep runtime observations tied to source_root and its fingerprint.")
     if not review:
         prompt += "\nCreate the required files in artifact_directory. Build and project_setup tasks may also change product code within the project. Return the supplied result schema with project-relative artifact paths. Do not run final checks: the controller runs those once after your work. Do not change controller state, policy, databases, evidence objects, common rules, AGENTS.md, or skills."
         prompt += "\nUse update_plan when available, with exactly the work_steps and step text beginning with the ID followed by a space (for example S1 Read inputs). Update pending/in_progress/completed as work actually progresses. These reports are advisory and do not approve work. Include every work step in result.steps with a concrete summary and project-relative artifact paths drawn from result.artifacts. Do not mark a step completed based only on intended work."
@@ -144,7 +177,7 @@ def run_checks(store, task, aid, directory):
         started = time.monotonic()
         with log.open("wb") as output:
             try:
-                process = subprocess.Popen(command, cwd=store.project, stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
+                process = subprocess.Popen(command, cwd=store.task_source(task), stdout=output, stderr=subprocess.STDOUT, start_new_session=True)
             except OSError:
                 code = -1
                 output.write(b"Could not start the planned check. Verify the executable and local environment.\n")
@@ -156,7 +189,7 @@ def run_checks(store, task, aid, directory):
                     process.wait()
                     code = -1
         report = {"argv": command, "exit_code": code, "duration_seconds": round(time.monotonic() - started, 3),
-                  "source_fingerprint": fingerprint(store.project), "log_sha256": __import__("hashlib").sha256(log.read_bytes()).hexdigest(),
+                  "source_fingerprint": store.task_fingerprint(task), "log_sha256": __import__("hashlib").sha256(log.read_bytes()).hexdigest(),
                   "executed_at": now(), "executor": "controller", "log_path": str(log.relative_to(store.project))}
         path = directory / ("check-" + str(index + 1) + ".json")
         write_json(path, report)
@@ -216,7 +249,7 @@ def ensure_checks(store, task, aid, directory):
     records = store.current_evidence(task["id"])
     store.intact(records)
     checks = [json_object(store.root / item["object_path"]) for item in records if item["kind"] == "check"]
-    current = fingerprint(store.project)
+    current = store.task_fingerprint(task)
     if any(not any(report.get("argv") == command and report.get("exit_code") == 0 and
                    report.get("source_fingerprint") == current for report in checks)
            for command in store.check_commands(task)):
@@ -226,7 +259,7 @@ def ensure_checks(store, task, aid, directory):
 def finish_work(store, tid, aid, directory, client_factory):
     task = store.task(tid)
     ensure_checks(store, task, aid, directory)
-    store.update(tid, fingerprint=fingerprint(store.project), status="reviewing", reason=None)
+    store.update(tid, fingerprint=store.task_fingerprint(tid), status="reviewing", reason=None)
     require(browser_ready(store, store.task(tid)),
             "Còn thiếu bằng chứng nghiệm thu trình duyệt cho phiên bản hiện tại. Kết quả làm tiếp trong Codex có thể được đồng bộ; các tiêu chí còn thiếu vẫn cần kiểm chứng.")
     review_task(store, tid, client_factory)
@@ -419,7 +452,8 @@ def run_phase(store, task, aid, directory, review, client_factory, thread_id=Non
     require(not desktop.enabled(store), "Phiên này thực thi trong Codex; kết nối riêng chỉ đồng bộ kết quả.")
     config = store.config
     role = "review" if review else task["role"]
-    selected = config["models"][role]
+    from .dispatch import route
+    selected = route(store, task, "review" if review else "work")
     last_activity = 0
     session = {}
 
@@ -470,11 +504,12 @@ def run_phase(store, task, aid, directory, review, client_factory, thread_id=Non
         try:
             with client_factory(directory, on_event=observe) as client:
                 options = {"thread_id": thread_id} if thread_id else {}
-                output = client.run(store.project, prompt, selected["model"], selected["effort"],
+                output = client.run(store.task_source(task), prompt, selected["model"], selected["effort"],
                             REVIEW_SCHEMA if review else RESULT_SCHEMA, readonly=review,
                             network=config["network_access"] and not review,
                             timeout=config["turn_timeout_seconds"], max_tokens=min(limits) if limits else None,
-                            title=None if thread_id else thread_title(config, task, review), **options)
+                            title=None if thread_id else thread_title(config, task, review),
+                            writable_roots=[store.task_source(task), directory] if not review else None, **options)
             break
         except ModelCapacityError:
             if retry == 2:

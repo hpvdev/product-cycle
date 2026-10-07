@@ -57,7 +57,7 @@ product-cycle onboard --project /absolute/new-project --brief /absolute/request.
 product-cycle onboard --project /absolute/new-project
 ```
 
-Bộ điều phối mới bắt đầu giao việc. Bạn cùng BA chốt phân tích; brief ban đầu không thay cho đặc tả hoặc quyết định duyệt. Project có sẵn giữ nguyên chính sách và lịch sử. Một process vừa khởi động chưa chứng minh đội ngũ đang chạy; bản ghi phiên và trạng thái kết nối xác nhận hoạt động.
+Bộ điều phối mới bắt đầu giao việc. BA phân tích và review theo chế độ đã chọn; brief ban đầu chưa phải đặc tả được chấp nhận. Project có sẵn giữ nguyên chính sách và lịch sử. Một process vừa khởi động chưa chứng minh đội ngũ đang chạy; bản ghi phiên và trạng thái kết nối xác nhận hoạt động.
 
 Dashboard nhận cập nhật trực tiếp qua kết nối sự kiện, tự kết nối lại với trạng thái đầy đủ và báo khi dữ liệu có thể đã cũ. Trạng thái công ty, danh sách nhân viên/chức danh, công việc và hoạt động đã ghi nhận hiện rõ mà không phụ thuộc zoom. Chỉ tạo link phiên khi có danh tính thật; phiên App Server chưa được xác nhận xuất hiện trong danh sách chat Codex App. Chưa có công cụ hoặc dữ liệu thật thì không giả lập hoạt động.
 
@@ -74,15 +74,15 @@ python3 -m product_cycle supervise --project /absolute/product
 
 Dashboard mở ở màn hình văn phòng: chọn nhân viên để xem việc được giao, các bước, phiên Codex, mức sử dụng đã ghi nhận, đầu ra và trao đổi. Có thể thu gọn panel, kéo/phóng to văn phòng và lọc lịch sử trao đổi. Nhân vật và đường trao đổi phản ánh bản ghi hoạt động; ảnh minh họa không chứng minh AI đang chạy. Các trang kế hoạch, quy trình và bằng chứng vẫn được giữ.
 
-Supervisor độc lập với dashboard, tự giao việc đủ đầu vào, kiểm tra, mở review độc lập và xử lý sửa lại theo chính sách. `max_concurrent = 0` cho phép giao việc theo nhu cầu, không đặt trần phiên cố định của project; giá trị dương giữ giới hạn đã chọn. Giới hạn nhà cung cấp và quy tắc chỉ một phiên ghi mã nguồn vẫn có hiệu lực. Không mở mọi vị trí chỉ để làm văn phòng trông bận rộn.
+Supervisor độc lập với dashboard, tự giao việc đủ đầu vào, kiểm tra, mở review độc lập và xử lý sửa lại theo chính sách. `max_concurrent = 0` cho phép giao việc theo nhu cầu, không đặt trần phiên cố định của project; giá trị dương giữ giới hạn đã chọn. Giới hạn nhà cung cấp vẫn có hiệu lực. Worker được phép dùng workspace riêng có thể chạy song song; source chung chỉ có một writer tích hợp. Không mở mọi vị trí chỉ để làm văn phòng trông bận rộn.
 
 Với chính sách công ty `autonomous` được chọn rõ, BA tự phân tích brief và ghi rõ giả định hợp lý trong phạm vi đã giao, không bắt buộc phỏng vấn hay duyệt phân tích; review độc lập vẫn bắt buộc. Sau khi phân tích được review chấp nhận, Design Director và Art Director chọn thiết kế trong phạm vi đã chốt; triển khai, kiểm chứng và review độc lập vẫn bắt buộc. Quyết định của công ty không được ghi thành người dùng đã duyệt. Nghiệm thu cuối của người dùng là tùy chọn theo chính sách này. Chế độ `supervised` và project cũ giữ nguyên các gate đã cấu hình cho đến khi người dùng đổi chính sách. Các câu hỏi còn thiếu có lý do, lựa chọn và đề xuất; dashboard chỉ đọc, câu trả lời và quyết định được ghi qua Codex hoặc luồng chủ sản phẩm được hỗ trợ.
 
-Máy và supervisor phải hoạt động để tiếp tục khi đóng trình duyệt. `team-status` xem trạng thái, `team-stop` yêu cầu dừng. Xem [cách vận hành đội ngũ](skills/product-cycle/references/team-operation.md) và [nhiệm vụ các vị trí](skills/product-cycle/references/company-roles.md). Task trong plan có thể chọn `worker` là `build`, `frontend`, `backend`, `mobile` hoặc `game_engineer`; lựa chọn này chỉ đổi chuyên môn thực hiện, giữ nguyên phạm vi, tiêu chí và quy tắc một writer. Chế độ đội ngũ và chính sách công ty cần được chọn rõ; project đang chạy không tự đổi chế độ.
+Máy và supervisor phải hoạt động để tiếp tục khi đóng trình duyệt. `team-status` xem trạng thái, `team-stop` yêu cầu dừng. Xem [cách vận hành đội ngũ](skills/product-cycle/references/team-operation.md) và [nhiệm vụ các vị trí](skills/product-cycle/references/company-roles.md). Task trong plan có thể chọn `worker` là `build`, `frontend`, `backend`, `mobile` hoặc `game_engineer`; lựa chọn này chỉ đổi chuyên môn thực hiện, giữ nguyên phạm vi, tiêu chí và ranh giới workspace/tích hợp. Chế độ đội ngũ và chính sách công ty cần được chọn rõ; project đang chạy không tự đổi chế độ.
 
 `init` tự chuẩn bị Git nếu chưa có, bổ sung `.gitignore`, tạo `AGENTS.md`/`PRODUCT_CYCLE_RULES.md` và cài bộ skill theo project, gồm Frontend App Builder từ repo OpenAI hiện hành và skill làm lại quy trình `product-cycle-reset`. Giữ nguyên Git, hướng dẫn và skill đã có; không tự commit/push. Thiết kế kỹ thuật tạo `project-setup.json`; công việc chuẩn bị bên trong Phát triển tạo coding rules theo stack, cấu trúc code, môi trường, công cụ kiểm tra và phần dùng chung trước mọi task chức năng. State và bằng chứng đã chốt nằm ở `~/.local/share/product-cycle`, ngoài vùng AI được ghi. `PRODUCT_CYCLE_HOME` đổi nơi lưu; giữ nguyên trong một cycle. `PRODUCT_CYCLE_CODEX` chọn binary nếu Codex không nằm trong PATH.
 
-Dự án mới xác định màn hình, trạng thái và đường chuyển trước khi coding. Mỗi trạng thái trong phạm vi phải có ảnh thiết kế để người có thẩm quyền theo chính sách đã chọn xem và chốt; có thể dùng ảnh Image Gen hoặc ảnh chụp prototype, tái sử dụng cùng bộ quy tắc thiết kế. Mỗi task UI gắn với đúng màn hình, trạng thái, kích thước và phiên bản mẫu; khi code phải có ảnh giao diện thật và báo cáo đối chiếu, đồng thời kiểm tra logic theo đặc tả. Frontend App Builder hỗ trợ concept, thi công và đối chiếu ảnh UI thật. Bộ cài giữ phiên bản nguồn được ghi trong [SOURCES](docs/SOURCES.md), không tự tải bản mới mỗi lần chạy. Việc cài skill và qua test controller chưa chứng minh chất lượng thị giác của sản phẩm.
+Dự án mới xác định màn hình, trạng thái và đường chuyển trước khi coding. Mỗi trạng thái được mô tả và liên kết ảnh tham chiếu; trạng thái chỉ đổi chữ/số/nút có thể dùng chung ảnh. Ảnh Image Gen được chọn có thể trực tiếp làm baseline; Figma tùy chọn, không dựng HTML/CSS hay chạy server chỉ để tạo ảnh thiết kế. Kích thước ảnh không phải gate tuyệt đối; design.md xác định viewport mục tiêu, responsive và các chỉnh sửa nhãn/ký hiệu. Mỗi task UI gắn với đúng màn hình, trạng thái, kích thước và phiên bản mẫu; khi code phải có ảnh giao diện thật và báo cáo đối chiếu, đồng thời kiểm tra logic theo đặc tả. Frontend App Builder hỗ trợ concept, thi công và đối chiếu ảnh UI thật. Bộ cài giữ phiên bản nguồn được ghi trong [SOURCES](docs/SOURCES.md), không tự tải bản mới mỗi lần chạy. Việc cài skill và qua test controller chưa chứng minh chất lượng thị giác của sản phẩm.
 
 ## Công cụ native cho công ty
 
@@ -174,3 +174,17 @@ Hai lệnh đầu dùng tình huống tổng hợp/adapter giả lập, không g
 Chế độ tuần tự và chế độ đội ngũ có chính sách riêng; không tự merge/deploy/thông báo bên ngoài/theo dõi production. Công cụ native chỉ chạy trong chat đã được cho phép, không được suy từ khả năng của runtime khác. Cải tiến hướng dẫn chỉ được áp dụng qua hợp đồng và review đã mô tả, không phải mọi đề xuất retro đều tự chạy. Lệnh kiểm tra chạy cục bộ ngoài sandbox Codex, nên cần lệnh tin cậy thuộc phạm vi đã cấp phép và được review. Test controller không chứng minh kết nối nhà cung cấp hoặc toàn bộ sản phẩm được giao tự chủ; chất lượng cần đầu ra thật và kiểm chứng thích hợp của phiên bản hiện tại.
 
 Đọc [quy trình](docs/WORKFLOW.md), [kiến trúc](docs/ARCHITECTURE.md), [vận hành](docs/RUNBOOK.md), [đánh giá](evals/README.md).
+
+## Agent workflow 0.4
+
+Cycle live mới có thêm Feature Map trước plan và task tích hợp sau mỗi increment. Kiến trúc cung cấp verification.json; plan gắn feature, procedure và dependency; context pack giữ quyền, quyết định và provenance đã chốt. Builder dùng đúng source_root, review độc lập kiểm chứng bản đó, controller tích hợp rồi kiểm chứng source chung. Whole-product verify vẫn cần hành trình tổng và bằng chứng đúng bản bàn giao.
+
+Cycle cũ không tự đổi hợp đồng. Xem ảnh hưởng rồi áp dụng khi idle:
+
+```sh
+python3 -m product_cycle upgrade-workflow --project /absolute/product
+python3 -m product_cycle upgrade-workflow --project /absolute/product --apply
+python3 -m product_cycle configure --project /absolute/product --workspace-mode isolated
+```
+
+Nâng cấp làm các bước bị ảnh hưởng thành stale, giữ lịch sử và model/gate cũ. Cập nhật skill là thao tác riêng cho project được chọn. Routing có thể cấu hình bằng configure --routing-file; profile/capability đã khai báo chưa chứng minh công cụ thực sự kết nối. Instance dùng chung giữ reservation cả khi kết quả phiên chưa rõ. Cải tiến chạy trial có giới hạn, judge nhận opaque labels, reviewer độc lập quyết định; thiếu held-out cases được ghi thành giới hạn. Test controller dùng dữ liệu tổng hợp, không chứng minh chất lượng sản phẩm hay lợi ích của skill trên model thật.

@@ -120,6 +120,8 @@ class ImprovementStore:
         """)
         self.root = store.root / "improvements"
         self.root.mkdir(exist_ok=True)
+        from .learning_trials import migrate
+        migrate(self.db)
 
     def _row(self, cid):
         row = self.db.execute("SELECT * FROM improvement_candidates WHERE id=?", (cid,)).fetchone()
@@ -210,6 +212,10 @@ class ImprovementStore:
                 entry.write_text(entry.read_text() + LINK)
         payload = dict(bundle, evidence_records=sealed_evidence, targets={c["target_id"]:spec for c,spec,_ in prepared},
                        before={p.name:skill_hashes(p) for p in before.iterdir()}, after={p.name:skill_hashes(p) for p in after.iterdir()})
+        if self.store.config.get("agent_workflow_version"):
+            from .learning_trials import select_holdouts
+            remaining = max(0, self.store.config.get("learning_budget", {}).get("max_cases", 4) - len(bundle["case_ids"]))
+            payload["held_out_sources"] = select_holdouts(self, bundle["case_ids"], min(2, remaining)) if remaining else []
         candidate_hash = _hash(_encoded(payload));write_json(directory / "candidate.json", payload)
         with self.db:
             version = self.db.execute("SELECT COALESCE(MAX(version),0)+1 FROM improvement_candidates").fetchone()[0]
@@ -223,7 +229,7 @@ class ImprovementStore:
         for variant in ["before", "after"]:
             for name, hashes in row["bundle"][variant].items():
                 require(skill_hashes(self.root / row["id"] / variant / name) == hashes, "Bản hướng dẫn dùng để thử nghiệm đã thay đổi; hãy kiểm chứng lại.")
-        for item in row["bundle"]["evidence_records"]:
+        for item in row["bundle"]["evidence_records"] + row["bundle"].get("held_out_sources", []):
             require(digest(item["object_path"]) == item["sha256"], "Bằng chứng đã lưu có thay đổi; hãy kiểm chứng lại.")
         if row["evaluation"]:
             for check in row["evaluation"]["checks"]:
@@ -272,7 +278,9 @@ class ImprovementStore:
     def evaluation_context(self, cid):
         row=self._row(cid);self._intact(row)
         raw_cases=[item for item in row["bundle"]["evidence_records"] if item["path"] in row["bundle"]["case_ids"]]
+        raw_cases += row["bundle"].get("held_out_sources", [])
         packet={"candidate_id":cid,"candidate_hash":row["candidate_hash"],"bundle":row["bundle"],"before_directory":str(self.root/cid/"before"),"after_directory":str(self.root/cid/"after"),"checks":row["evaluation"],"case_ids":row["bundle"]["case_ids"],"raw_case_sources":raw_cases,"instruction":"Forward-test each exact sealed raw input separately against before and after guidance. Copy the original bytes to input_artifact and echo input_sha256; both variants must use that same input. Record actual artifacts and regressions; check success alone is not improvement."}
+        packet["case_ids"] = [item["path"] for item in raw_cases]
         return dict(packet,context_hash=_hash(_encoded(packet)))
 
     def record_evaluation(self, cid, report, evaluator_run_id):
@@ -284,7 +292,7 @@ class ImprovementStore:
         require(row["status"]=="evaluating" and row["evaluation"] and row["evaluation"]["checks_passed"], "Các phép kiểm tra được cấu hình chưa đạt.")
         run=self._run(evaluator_run_id,"evaluate",[row["author_run_id"]]);packet=self.evaluation_context(cid)
         require(report.get("candidate_hash")==row["candidate_hash"] and report.get("context_hash")==packet["context_hash"], "Báo cáo thử nghiệm chưa khớp đúng phiên bản đề xuất.")
-        cases=report.get("cases");require(isinstance(cases,list) and all(isinstance(x,dict) for x in cases) and {x.get("case_id") for x in cases}==set(row["bundle"]["case_ids"]) and len(cases)==len(row["bundle"]["case_ids"]), "Hãy thử đủ các tình huống đã chọn, mỗi tình huống một lần.")
+        cases=report.get("cases");require(isinstance(cases,list) and all(isinstance(x,dict) for x in cases) and {x.get("case_id") for x in cases}==set(packet["case_ids"]) and len(cases)==len(packet["case_ids"]), "Hãy thử đủ các tình huống đã chọn, mỗi tình huống một lần.")
         sealed=[]
         for case in cases:
             require(isinstance(case.get("improved"),bool) and isinstance(case.get("regressed"),bool) and isinstance(case.get("reason"),str) and case["reason"].strip(), "Mỗi tình huống cần đánh giá cụ thể kết quả trước và sau.")
@@ -355,6 +363,8 @@ class ImprovementStore:
                 self._update(cid,"apply_attention","apply.failed")
                 raise
             self._update(cid,"applied","apply.completed",{"before_fingerprint":before_fingerprint,"after_fingerprint":fingerprint(self.store.project),"backup":str(backup)})
+            from .knowledge import publish
+            publish(self, self._row(cid))
             self.store.event(None,"workflow.guidance.updated",{"candidate_id":cid,"version":row["version"],"automatic":automatic,"reason":reason,"note":"Phiên bản hướng dẫn và nền tảng đã được ghi nhận lại. Bằng chứng sản phẩm đã nghiệm thu giữ nguyên fingerprint cũ; phiên tiếp theo cần kiểm tra bản source hiện hành."})
             return self._row(cid)
 
@@ -383,6 +393,8 @@ class ImprovementStore:
                 self._update(cid,"rollback_attention","rollback.failed")
                 raise
             self._update(cid,"rolled_back","rollback.completed")
+            from .knowledge import unpublish
+            unpublish(self, row)
             self.store.event(None,"workflow.guidance.rolled_back",{"candidate_id":cid,"version":row["version"],"note":"Đã khôi phục hướng dẫn và ghi nhận lại nền tảng; không sửa bằng chứng sản phẩm cũ."})
             return self._row(cid)
 

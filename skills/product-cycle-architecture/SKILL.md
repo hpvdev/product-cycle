@@ -3,7 +3,7 @@ name: product-cycle-architecture
 description: Design scoped data contracts, component boundaries and technical decisions from accepted requirements and design.
 ---
 
-# Thiết kế kỹ thuật
+# Technical design
 
 Reuse existing structures. Record consequential choices and unresolved risks. Verify uncertain technical assumptions with focused experiments when useful; do not add architecture or infrastructure without a concrete requirement.
 
@@ -15,11 +15,11 @@ When invoked on its own, perform only the requested stage in the selected projec
 
 ## Preferred flow
 
-1. Đọc cấu trúc hiện có: Xác định phần code và quy tắc liên quan; dùng lại thành phần phù hợp.
-2. Thiết kế dữ liệu và giao tiếp: Mô tả dữ liệu, ranh giới thành phần và hợp đồng giao tiếp.
-3. Chọn cách triển khai: Ghi lựa chọn phù hợp phạm vi và lý do đánh đổi.
-4. Xử lý điểm chưa chắc: Kiểm chứng phần kỹ thuật có rủi ro hoặc ghi rõ điều còn bị chặn.
-5. Xác định cách kiểm tra và khôi phục: Nêu cách chứng minh tính đúng và khôi phục khi cần.
+1. Read the relevant source and rules; reuse existing components.
+2. Specify data, component boundaries and communication contracts.
+3. Choose an implementation within scope and explain consequential tradeoffs.
+4. Investigate uncertain technical assumptions or record the dependent blocker.
+5. Define verification and recovery for the selected product.
 
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
 
@@ -27,6 +27,10 @@ New local cycles use policy.service_setup_required: architecture identifies nece
 
 For cycles with project_setup_required, produce project-setup.json describing the selected stack, structure, coding rules, tooling, common components, environment names and actual foundation checks. The controller creates a preparatory task inside Development, before feature tasks.
 
-## Khi sản phẩm là game
+## Game products
 
 If the brief or accepted direction asks for a game, read [Game Design](../product-cycle-game-design/SKILL.md) as a companion to this stage. Use its architecture guidance to map accepted gameplay rules to rendering, input/state/time ownership, assets and supported device constraints without choosing a new game concept. Keep accepted scope, configured owner gates and evidence boundaries; the companion is not a new stage or an execution command.
+
+## Versioned verification contract
+
+For agent_workflow_version=1, produce verification.json using context.verification_contract_path. Specify launch/readiness, read-only doctor, actual user-facing procedures, environment/tool needs, instance isolation, evidence and cleanup. Select exclusive for a shared runtime that cannot safely be driven concurrently; isolated requires separate instance/data/ports. Planned commands do not establish connectivity or behavior. The reviewed feature map follows architecture before planning.

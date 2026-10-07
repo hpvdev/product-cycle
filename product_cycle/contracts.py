@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 RESOURCES = Path(__file__).parent / "resources"
-STAGES = ["analysis", "design", "architecture", "plan", "setup", "build", "verify", "handoff", "retro"]
+STAGES = ["analysis", "design", "architecture", "feature_map", "plan", "setup", "build", "integration", "verify", "handoff", "retro"]
 STAGE_TITLES = {
     "project_setup": "Thiết lập dự án",
     "setup": "Cấu hình dịch vụ",
@@ -12,6 +12,7 @@ STAGE_TITLES = {
     "architecture": "Thiết kế kỹ thuật", "plan": "Lập kế hoạch",
     "build": "Phát triển", "verify": "Nghiệm thu", "handoff": "Bàn giao",
     "retro": "Cải thiện quy trình",
+    "feature_map": "Bản đồ tính năng", "integration": "Tích hợp và kiểm chứng",
 }
 FILES = {
     "project_setup": ["project-setup.md"],
@@ -20,10 +21,22 @@ FILES = {
     "design": ["design.md", "design-baseline.json"], "architecture": ["architecture.md"],
     "plan": ["plan.json"], "verify": ["acceptance.md"],
     "handoff": ["handoff.md"], "retro": ["retro.json"],
+    "feature_map": ["feature-map.json", "feature-map.md"],
+    "integration": ["integration.md"],
 }
 
 # Local task IDs remain stable across retries; progress is scoped to each attempt.
 WORK_STEPS = {
+    "feature_map": [
+        ("Map accepted features", "Link feature IDs to requirements and screen states."),
+        ("Define observable verification", "Specify entry paths, actions, expected effects and evidence."),
+        ("Record dependencies and uncertainty", "Separate planned code paths from observed implementation."),
+    ],
+    "integration": [
+        ("Inspect reviewed changes", "Read the exact workspace version and integration journal."),
+        ("Verify integrated behavior", "Exercise the canonical product and record current-version results."),
+        ("Update the feature map", "Confirm implementation entry points, limitations and verification evidence."),
+    ],
     "project_setup": [
         ("Đọc thiết kế và chốt quy tắc code", "Ghi quy tắc theo stack trước khi triển khai các tính năng."),
         ("Thiết lập cấu trúc và môi trường chạy", "Chuẩn bị cấu trúc code, dependency và cách chạy local theo thiết kế."),
@@ -42,13 +55,13 @@ WORK_STEPS = {
         ("Xác định người dùng và mục tiêu", "Nêu ai sử dụng sản phẩm và kết quả họ cần đạt."),
         ("Làm rõ vấn đề", "Mô tả tình huống sử dụng, khó khăn và nhu cầu chính."),
         ("Đối chiếu dữ kiện và giả định", "Ghi nguồn, giả định và câu hỏi còn ảnh hưởng tới quyết định."),
-        ("Đề xuất hướng và phạm vi để bạn chốt", "So sánh trải nghiệm, điểm khác biệt và đánh đổi; ghi câu hỏi còn mở, chưa coi giả định là quyết định của bạn."),
+        ("Đề xuất hướng và phạm vi", "So sánh trải nghiệm, điểm khác biệt và đánh đổi; quyết định theo chính sách đã chọn, phân biệt giả định với phản hồi của chủ sản phẩm."),
         ("Viết yêu cầu và tiêu chí", "Mỗi yêu cầu có hành vi quan sát được để nghiệm thu."),
     ],
     "design": [
         ("Xác định màn hình và luồng thao tác", "Liệt kê màn hình, tab, trạng thái và đường chuyển theo yêu cầu đã chốt."),
         ("Khảo sát hướng thiết kế", "Dùng thiết kế hiện có hoặc tạo phương án bằng Product Design và Image Gen khi công cụ sẵn có."),
-        ("Thiết kế bộ ảnh màn hình", "Dùng hướng đã chọn để tạo ảnh từng màn hình; lấy phản hồi trong Codex và lưu bản để bạn duyệt."),
+        ("Chọn bộ ảnh tham chiếu", "Dùng hướng đã chọn làm baseline; các trạng thái đơn giản có thể dùng chung ảnh, quyết định theo chính sách đã chọn."),
         ("Đặc tả màn hình và tương tác", "Ghi bố cục, dữ liệu, từng thao tác, điều kiện sử dụng, xử lý, phản hồi, chuyển màn và các trạng thái cần thiết; liên kết ảnh thiết kế và tài nguyên."),
         ("Chốt quy tắc chung và cách nghiệm thu", "Ghi quy tắc dùng chung, màu, font, khoảng cách và bố cục theo thiết bị; tách tiêu chí kiểm tra hành vi với đối chiếu ảnh thiết kế."),
     ],
@@ -117,6 +130,10 @@ def work_steps(stage, screen_design=True):
     return [{"id": "S" + str(i + 1), "title": title, "description": description}
             for i, (title, description) in enumerate(definitions)]
 CRITERIA = {
+    "feature_map": ["Features cover accepted requirements and relevant screen states.",
+                    "Each feature has concrete verification procedures and honest implementation status."],
+    "integration": ["The exact reviewed changes are integrated without losing concurrent work.",
+                    "Integrated feature behavior has current-version verification evidence."],
     "project_setup": ["Cấu trúc, môi trường, coding rules và phần dùng chung đáp ứng thiết kế.",
                       "Công cụ và kiểm tra dự án nền chạy thành công; có hướng dẫn dùng local."],
     "setup": ["Dịch vụ, tài khoản và phạm vi được phép cấu hình đã rõ",
@@ -140,7 +157,7 @@ CRITERIA = {
 
 def defaults(model=None, effort=None):
     return {
-        "version": 1, "workflow_version": "0.3.0", "mode": "live",
+        "version": 1, "workflow_version": "0.4.0", "agent_workflow_version": 1, "mode": "live",
         "bootstrap_required": True, "project_setup_required": True,
         "service_setup_required": True, "delivery_mode": "local", "release_deferred": True,
         "models": {stage: {
@@ -149,9 +166,9 @@ def defaults(model=None, effort=None):
         } for stage in STAGES + ["review", "project_setup"]},
         "executor": "codex-desktop", "dashboard_read_only": True,
         "collaborative_product": True, "experience_checkpoint_required": True,
-        "screen_design_required": True,
+        "screen_design_required": True, "workspace_mode": "shared",
         "gates": ["analysis", "design", "handoff"], "task_gates": [],
-        "max_attempts": 2, "turn_timeout_seconds": 900,
+        "max_attempts": 2, "max_repairs": 2, "turn_timeout_seconds": 900,
         "max_turn_tokens": None, "max_cycle_tokens": None,
         "network_access": True, "verification_commands": [],
         "browser_required": False, "allowed_tools": [],

@@ -62,3 +62,9 @@ Controller lifecycle:
 - `snapshot()` exposes versions, before/after hashes, evidence, decisions and durable events. Interrupted filesystem transitions remain visible and are not silently retried.
 
 Application and rollback never commit, push, publish or change product goals, configured gates, controller permissions or registered product evidence. An installed-skill update changes the source fingerprint; do not apply while an owner decision is pending for an earlier reviewed fingerprint.
+
+## Versioned behavioral trials
+
+For agent_workflow_version=1, each raw case is a sealed JSON artifact with prompt, expectations:[string] and optional files:{relative_path:text}. Use a genuine recorded request and grounded expected outcomes, excluding credentials and unrelated private chats. The controller uses prompt/files as ordinary candidate input and reserves expectations for the judge. Fixtures cannot replace skills, permissions or Git state.
+
+The controller runs both immutable guidance versions in neutral isolated directories, records exact thread/turn outcomes, tokens and artifact hashes, and adds held-out registered cases when available. It exposes opaque case/variant labels to the evaluator without author rationale or variant mapping. Return the supplied blinded schema and cite actual proof; synthetic outputs cannot establish real behavioral benefit. Scores are comparative observations, subject to independent review. Missing evidence, exceeded budgets and unknown execution outcomes do not authorize adoption or a duplicate run. Project lessons remain scoped; publishing portable learned guidance to later installations requires explicit share_learned_guidance configuration.

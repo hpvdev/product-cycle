@@ -116,6 +116,11 @@ def migrate(db):
     if "cwd" not in {row[1] for row in db.execute("PRAGMA table_info(team_runs)")}:
         db.execute("ALTER TABLE team_runs ADD COLUMN cwd TEXT")
         db.commit()
+    if "resource_key" not in {row[1] for row in db.execute("PRAGMA table_info(team_runs)")}:
+        db.execute("ALTER TABLE team_runs ADD COLUMN resource_key TEXT")
+    db.execute("""CREATE UNIQUE INDEX IF NOT EXISTS team_one_runtime_instance ON team_runs(resource_key)
+        WHERE resource_key IS NOT NULL AND status IN ('preparing','dispatching','running','checking','unknown')""")
+    db.commit()
     from .company_questions import migrate as migrate_questions
     migrate_questions(db)
     from .company import migrate as migrate_company
@@ -150,6 +155,8 @@ def configure(store, active=True, max_concurrent=None, game_designer=None, new_c
         config["team"]["self_improve"] = policy == "autonomous"
     config["team"]["autonomous_checkpoint"] = bool(new_cycle or previous.get("autonomous_checkpoint"))
     if active:
+        if new_cycle and config.get("agent_workflow_version"):
+            config["workspace_mode"] = "isolated"
         if not previous.get("enabled"):
             config["team"]["previous_gates"] = config.get("gates", [])
             config["team"]["previous_task_gates"] = config.get("task_gates", [])
@@ -205,7 +212,7 @@ def agent_for(task, phase, store=None):
         return {"manage": "coordinator", "improve_propose": "skill_engineer",
                 "improve_evaluate": "evaluation_engineer", "improve_review": "improvement_reviewer"}[phase]
     if phase == "review":
-        department = {"setup": "architecture", "project_setup": "build"}.get(task["stage"], task["stage"])
+        department = {"setup": "architecture", "project_setup": "build", "feature_map": "plan", "integration": "build"}.get(task["stage"], task["stage"])
         return department + "_reviewer" if department + "_reviewer" in ROLES else "review"
     if phase == "work" and task["role"] == "build" and store is not None:
         config = store.config.get("team", {})
@@ -217,6 +224,7 @@ def agent_for(task, phase, store=None):
                 details.get("kind") == "worker", "Công việc coding cần được giao cho một vai trò kỹ sư thực thi hợp lệ.")
         return selected
     return {"plan": "coordinator", "handoff": "coordinator", "retro": "coordinator",
+            "feature_map": "coordinator", "integration": "build",
             "setup": "architecture", "project_setup": "build"}.get(task["role"], task["stage"])
 
 
@@ -232,7 +240,28 @@ def employee_role(store, agent_id):
     return dict(ROLE_DETAILS[row["base_role"]], id=row["id"], name=row["name"], base_role=row["base_role"])
 
 
+def runtime_resource(store, task, phase, selected=None):
+    if not store.config.get("agent_workflow_version") or phase not in {"work", "review"} or task["role"] not in {"build", "integration", "verify"}:
+        return None
+    contract = store.sealed_document("architecture", "verification.json")
+    if contract["environment"]["instance_policy"] != "exclusive":
+        return None
+    from .dispatch import route
+    selected = selected or route(store, task, phase)
+    return json.dumps([selected["device"], contract["environment"]["runtime"]])
+
+
 def preflight_roles(store, task):
+    if store.config.get("agent_workflow_version") and task["role"] in {"build", "integration"}:
+        from .dispatch import execution_metadata, validate_execution
+        metadata = validate_execution(execution_metadata(store, task))
+        primary = employee_role(store, agent_for(task, "work", store))["base_role"]
+        roles = list(metadata.get("consultants", []))
+        if metadata.get("complexity", "standard") == "complex":
+            roles += ["test_automation", "performance"]
+            if primary in {"backend", "build"}:
+                roles += ["security"]
+        return list(dict.fromkeys(role for role in roles if role != primary))
     if company_enabled(store):
         roles = {"analysis": ["product_manager", "ux_researcher"],
                  "design": ["design_director", "art_director", "ux_researcher", "design_system"],
@@ -315,10 +344,14 @@ class TeamStore:
             require(details["base_role"] == employee_role(self.store, agent_for(task, phase, self.store))["base_role"], "Phiên coding cần theo phân công kỹ sư đã cấu hình.")
         role = "review" if phase in {"review", "improve_review"} else task["role"] if phase == "work" and details["base_role"] not in {"frontend", "backend", "mobile", "game_engineer"} else details["model_role"]
         if phase == "consult":
-            require(task["stage"] in details["stages"], "Vai trò tư vấn này không phù hợp giai đoạn hiện tại.")
-        selected = self.store.config["models"][role]
-        writer = phase == "work" and task["role"] in {"build", "project_setup", "setup"}
-        barrier = writer or phase != "consult" and (task["stage"] in {"build", "setup", "verify"} or bool(task["checks"]))
+            require(("build" if task["stage"] == "integration" else task["stage"]) in details["stages"], "Vai trò tư vấn này không phù hợp giai đoạn hiện tại.")
+        from .dispatch import route
+        from .workspaces import isolated
+        selected = route(self.store, task, "review" if phase in {"review", "improve_review"} else phase, role)
+        private_source = isolated(self.store, task)
+        writer = phase == "work" and task["role"] in {"build", "integration", "project_setup", "setup"} and not private_source
+        barrier = not private_source and (writer or phase != "consult" and (task["stage"] in {"build", "integration", "setup", "verify"} or bool(task["checks"])))
+        resource = runtime_resource(self.store, task, phase)
         rid = "run-" + uuid.uuid4().hex
         directory = Path(directory or self.store.project / ".product-cycle" / "team" / rid)
         directory.mkdir(parents=True, exist_ok=True)
@@ -335,12 +368,17 @@ class TeamStore:
                     "Chờ phiên đang thay đổi hoặc kiểm chứng mã nguồn hoàn tất.")
             require(not writer or not self.db.execute("SELECT id FROM team_runs WHERE source_writer=1 AND status='preparing'").fetchone(),
                     "Kỹ sư thực thi đang chuẩn bị đầu việc khác; chờ tư vấn hoàn tất.")
+            from .capability_jobs import resource_in_use
+            require(not resource_in_use(self.store, resource) and (not resource or not self.db.execute("SELECT id FROM team_runs WHERE resource_key=? AND status IN ('preparing','dispatching','running','checking','unknown')", (resource,)).fetchone()),
+                    "Chờ instance kiểm chứng dùng chung; phiên hiện tại hoặc chưa rõ kết quả còn giữ tài nguyên.")
             self.db.execute("INSERT INTO team_runs(id,agent_id,task_id,revision,attempt_id,phase,status,source_writer,source_barrier,model,effort,directory,created_at,retry_count,request_id) VALUES(?,?,?,?,?,?,'dispatching',?,?,?,?,?,?,?,?)",
                             (rid, agent_id, task_id, task["revision"], attempt_id, phase, int(writer), int(barrier),
                              selected["model"], selected["effort"], str(directory), now(), retry_count, request_id))
-            self.db.execute("UPDATE team_runs SET cwd=? WHERE id=?", (str(self.store.project if writer else directory.resolve()), rid))
+            source = self.store.task_source(task)
+            self.db.execute("UPDATE team_runs SET cwd=?,resource_key=? WHERE id=?", (str(source if writer or private_source and phase in {"work", "review"} else directory.resolve()), resource, rid))
         run = self.run(rid)
         self.event("run.queued", run, phase=phase, revision=task["revision"], attempt_id=attempt_id)
+        self.event("dispatch.selected", run, routing=selected)
         return run
 
     def validate_origin(self, rid, params=None):
@@ -403,7 +441,7 @@ class TeamStore:
                     "Vai trò tư vấn chưa hợp lệ; review vẫn dùng phiên độc lập.")
             require(tid == run["task_id"] and isinstance(prompt, str) and 0 < len(prompt.strip()) <= 8000,
                     "Tư vấn cần gắn với công việc hiện tại và có câu hỏi cụ thể.")
-            require(task["stage"] in employee_role(self.store, recipient)["stages"], "Vai trò tư vấn này không phù hợp giai đoạn hiện tại.")
+            require(("build" if task["stage"] == "integration" else task["stage"]) in employee_role(self.store, recipient)["stages"], "Vai trò tư vấn này không phù hợp giai đoạn hiện tại.")
         require(isinstance(client_key, str) and 0 < len(client_key) <= 100, "Cần mã yêu cầu riêng để tránh trùng.")
         previous = self.db.execute("SELECT * FROM team_requests WHERE sender_run_id=? AND client_key=?", (run["id"], client_key)).fetchone()
         if previous:
@@ -535,7 +573,12 @@ def handle_tool(team, rid, params):
         require(isinstance(value, str) if spec["type"] == "string" else isinstance(value, int) and not isinstance(value, bool),
                 "Kiểu tham số công cụ điều phối chưa hợp lệ.")
     if name == "team_context":
-        packet = context(team.store, team.store.task(run["task_id"]))
+        task = team.store.task(run["task_id"])
+        packet = context(team.store, task)
+        if team.store.config.get("agent_workflow_version") and run["phase"] in {"work", "review"}:
+            from .context_packs import build_pack
+            phase = "reviewer" if run["phase"] == "review" else "fix" if task["attempts"] > 1 else "builder"
+            packet["context_pack"] = build_pack(team.store, task, phase, run["directory"])
         # The full mission is already supplied at dispatch. Repeated tool calls
         # need current authority/inputs, not every role mission and model config.
         packet["task"] = {key: packet["task"][key] for key in
@@ -664,7 +707,7 @@ def apply_output(team, run, output):
         if run["phase"] == "work" and store.task(task["id"])["status"] != "blocked":
             team.update(run["id"], status="checking")
             ensure_checks(store, store.task(task["id"]), run["attempt_id"], directory)
-            store.update(task["id"], fingerprint=fingerprint(store.project), status="reviewing", reason=None)
+            store.update(task["id"], fingerprint=store.task_fingerprint(task), status="reviewing", reason=None)
             require(browser_ready(store, store.task(task["id"])), "Chưa có đủ bằng chứng nghiệm thu trình duyệt; cần người vận hành ghi nhận trên sản phẩm thật.")
     team.update(run["id"], status="completed", ended_at=now(), last_activity_at=now(), reason=None)
     team.event("run.completed", run, phase=run["phase"])
@@ -681,6 +724,7 @@ def run_mission(project, rid, client_factory, cancel):
     terminal_observed = False
     last_activity = 0
     pending = []
+    blind_judge = run["phase"] == "improve_evaluate" and bool(store.config.get("agent_workflow_version"))
 
     def control():
         require(not cancel.is_set(), "Phiên điều phối đã được yêu cầu dừng; kết quả đang chạy sẽ được đối chiếu khi khôi phục.")
@@ -736,7 +780,7 @@ def run_mission(project, rid, client_factory, cancel):
         details = employee_role(store, run["agent_id"])
         if run["phase"].startswith("improve_"):
             from .company_learning import mission
-            prompt, schema = mission(store, run)
+            prompt, schema = mission(store, run, client_factory, control)
         elif run["phase"] == "manage":
             from .company import management_prompt
             prompt, schema = management_prompt(store, task), MANAGE_SCHEMA
@@ -759,7 +803,7 @@ def run_mission(project, rid, client_factory, cancel):
         else:
             prompt = prompt_for(store, task, directory, run["phase"] == "review")
             schema = REVIEW_SCHEMA if run["phase"] == "review" else RESULT_SCHEMA
-        pending = team.mailbox(team.run(rid), "initial:" + rid)
+        pending = [] if blind_judge else team.mailbox(team.run(rid), "initial:" + rid)
         preflights = [dict(row) for row in team.db.execute("SELECT q.agent_id,q.status,r.reason,m.text AS advice FROM team_requests q JOIN team_runs origin ON origin.id=q.sender_run_id LEFT JOIN team_runs r ON r.id=q.run_id LEFT JOIN team_messages m ON m.sender_run_id=q.run_id AND m.client_key='consult-result:' || q.run_id WHERE origin.attempt_id=? AND origin.phase='work' AND q.kind='consult'", (run["attempt_id"],))] if run["phase"] == "work" else []
         for preflight in preflights:
             # A capacity retry uses a fresh thread but retains actual preflight advice
@@ -776,7 +820,7 @@ def run_mission(project, rid, client_factory, cancel):
                    "Do not assume desktop Image Gen/computer use are available here. Record missing tools honestly.\n" +
                    "Preflight outcomes (failed consultations are limitations, not successful advice): " + json.dumps(preflights, ensure_ascii=False) + "\n" +
                    "Initial delivered peer messages (advice only): " + json.dumps(pending, ensure_ascii=False))
-        if company_enabled(store):
+        if company_enabled(store) and not blind_judge:
             prompt += ("\nAutonomous company policy: analyze the supplied brief and choose reasonable, reversible defaults "
                        "within its scope without an owner interview or mandatory analysis approval. Record assumptions "
                        "and their provenance, then obtain independent review before dependent work. "
@@ -789,7 +833,7 @@ def run_mission(project, rid, client_factory, cancel):
             prompt += ("When native image generation or browser tools are missing, use team_request_capability after your last source edit, "
                        "return a blocker, and leave source unchanged until the native worker submits actual output. "
                        "On resuming, read team_context.native_results and use the sealed artifacts; do not repeat tool requests already completed.\n")
-        if company_enabled(store) and run["phase"] not in {"review", "improve_review"}:
+        if company_enabled(store) and not blind_judge and run["phase"] not in {"review", "improve_review"}:
             from .team_discussions import recent
             prompt += ("\nProject group chat: publish useful questions/findings/handoffs with team_open_discussion. "
                        "Mention only relevant colleagues by actual roster ID (JSON array). Question topics schedule "
@@ -807,13 +851,14 @@ def run_mission(project, rid, client_factory, cancel):
         limits = [n for n in [remaining, store.config.get("max_turn_tokens")] if n is not None]
         with client_factory(directory, on_event=observe) as client:
             output = client.run(Path(run["cwd"] or store.project), prompt, run["model"], run["effort"], schema,
-                                readonly=run["phase"] in {"review", "consult", "manage", "improve_review"},
+                                readonly=blind_judge or run["phase"] in {"review", "consult", "manage", "improve_review"},
                                 network=store.config["network_access"] and run["phase"] == "work",
                                 timeout=store.config["turn_timeout_seconds"], max_tokens=min(limits) if limits else None,
                                 title=store.config["name"] + " · " + details["name"] + " · " + task["title"],
-                                dynamic_tools=tool_specs(run["phase"] in {"review", "improve_review"}),
+                                dynamic_tools=[] if blind_judge else tool_specs(run["phase"] in {"review", "improve_review"}),
                                 tool_handler=lambda params: handle_tool(team, rid, params),
-                                writable_roots=[store.project] if run["source_writer"] else [directory], control=control)
+                                writable_roots=[store.task_source(task), directory] if run["phase"] == "work" and
+                                task["role"] in {"build", "integration", "project_setup", "setup"} else [directory], control=control)
         current = team.run(rid)
         require(output.get("thread_id") == current["thread_id"] and output.get("turn_id") == current["turn_id"], "Kết quả không khớp phiên nhóm đã quan sát.")
         apply_output(team, current, output)
@@ -915,6 +960,7 @@ class Supervisor:
         self.pool = MissionPool()
         self.futures = {}
         self.next_reconcile = 0
+        self.last_summary = None
 
     def heartbeat(self, status="running", reason=None):
         with self.store.db:
@@ -948,6 +994,27 @@ class Supervisor:
             requests = self.store.db.execute("SELECT status FROM team_requests WHERE sender_run_id=? AND kind='consult'", (run["id"],)).fetchall()
             if requests and all(row[0] in {"completed", "blocked", "cancelled"} for row in requests):
                 yield run
+
+    def admission_failed(self, task, phase, prior, error, aid=None):
+        reason = str(error)
+        if phase in {"work", "review"}:
+            if aid:
+                self.store.attempt_update(aid, status="failed", ended_at=now())
+            self.store.update(task["id"], status="blocked", reason=reason)
+        elif phase == "consult" and prior:
+            with self.store.db:
+                self.store.db.execute("UPDATE team_requests SET status='blocked' WHERE id=?", (prior.get("request_id") or prior["id"],))
+        elif phase.startswith("improve_") and prior and not prior.get("retry_at"):
+            with self.store.db:
+                self.store.db.execute("UPDATE company_learning SET reason=? WHERE id=?", (reason, prior["id"]))
+        elif phase == "manage":
+            self.store.update(task["id"], reason=reason)
+        if prior and prior.get("status") in {"preparing", "backoff"}:
+            self.team.update(prior["id"], status="blocked", reason=reason, ended_at=now())
+            if prior.get("attempt_id") and phase in {"work", "review"}:
+                self.store.attempt_update(prior["attempt_id"], status="failed", ended_at=now())
+        if (prior or {}).get("reason") != reason:
+            self.team.event("dispatch.blocked", task_id=task["id"], phase=phase, reason=reason)
 
     def tick(self, allow_work=True):
         for rid, future in list(self.futures.items()):
@@ -1004,12 +1071,27 @@ class Supervisor:
             for task, phase, prior in jobs:
                 agent_id = prior["agent_id"] if prior and prior.get("agent_id") else agent_for(task, phase, self.store)
                 live = [dict(row) for row in self.store.db.execute("SELECT * FROM team_runs WHERE status IN ('dispatching','running','checking','unknown')")]
-                writer = phase == "work" and task["role"] in {"build", "project_setup", "setup"}
-                barrier = writer or phase != "consult" and (task["stage"] in {"build", "setup", "verify"} or bool(task["checks"]))
+                from .workspaces import isolated
+                private_source = isolated(self.store, task)
+                writer = phase == "work" and task["role"] in {"build", "integration", "project_setup", "setup"} and not private_source
+                barrier = not private_source and (writer or phase != "consult" and (task["stage"] in {"build", "integration", "setup", "verify"} or bool(task["checks"])))
                 from .capability_jobs import source_in_use
                 if writer and source_in_use(self.store):
                     continue
                 if at_capacity(self.store, live, phase) or writer and any(row["source_barrier"] for row in live) or barrier and any(row["source_writer"] for row in live):
+                    continue
+                try:
+                    details = employee_role(self.store, agent_id)
+                    role = "review" if phase in {"review", "improve_review"} else task["role"] if phase == "work" and details["base_role"] not in {"frontend", "backend", "mobile", "game_engineer"} else details["model_role"]
+                    from .dispatch import route
+                    selected = route(self.store, task, "review" if phase in {"review", "improve_review"} else phase, role)
+                    resource = runtime_resource(self.store, task, phase, selected)
+                except (WorkflowError, OSError) as exc:
+                    self.admission_failed(task, phase, prior, exc)
+                    continue
+                from .capability_jobs import resource_in_use
+                if resource_in_use(self.store, resource) or resource and self.store.db.execute("SELECT id FROM team_runs WHERE resource_key=? AND status IN ('preparing','dispatching','running','checking','unknown') AND id!=?",
+                        (resource, prior.get("id", "") if prior else "")).fetchone():
                     continue
                 occupied = self.store.db.execute("SELECT id FROM team_runs WHERE agent_id=? AND status IN ('preparing','dispatching','running','checking','unknown')", (agent_id,)).fetchone()
                 if occupied and not (prior and prior.get("status") == "preparing" and occupied[0] == prior.get("id")):
@@ -1032,7 +1114,12 @@ class Supervisor:
                 elif phase == "manage" or phase.startswith("improve_"):
                     aid, directory = None, None
                 else:
-                    aid, directory = self.store.begin(task["id"], phase)
+                    try:
+                        aid, directory = self.store.begin(task["id"], phase)
+                    except (WorkflowError, OSError) as exc:
+                        self.store.update(task["id"], status="blocked", reason=str(exc))
+                        self.team.event("dispatch.blocked", task_id=task["id"], reason=str(exc))
+                        continue
                     if phase == "work" and task["stage"] == "verify":
                         from .capability_jobs import completed_context, register_browser_evidence
                         try:
@@ -1048,9 +1135,13 @@ class Supervisor:
                                 pass
                             self.team.event("native.attachment_failed", task_id=task["id"], attempt_id=aid)
                             continue
-                run = self.team.create_run(task["id"], phase, aid, directory, agent_id,
-                                           (prior["retry_count"] + 1) if prior and prior.get("retry_at") is not None else 0,
-                                           (prior["id"] if phase == "consult" and prior.get("kind") else prior.get("request_id")) if prior else None)
+                try:
+                    run = self.team.create_run(task["id"], phase, aid, directory, agent_id,
+                                               (prior["retry_count"] + 1) if prior and prior.get("retry_at") is not None else 0,
+                                               (prior["id"] if phase == "consult" and prior.get("kind") else prior.get("request_id")) if prior else None)
+                except (WorkflowError, OSError) as exc:
+                    self.admission_failed(task, phase, prior, exc, aid)
+                    continue
                 if phase == "manage":
                     from .company import reserve_management
                     signature = prior.get("management_signature") if prior else None
@@ -1061,13 +1152,22 @@ class Supervisor:
                 elif phase.startswith("improve_"):
                     from .company_learning import reserve
                     reserve(self.store, run, prior)
-                if phase == "work" and not prior and preflight_roles(self.store, task):
-                    self.team.update(run["id"], status="preparing")
-                    for role in preflight_roles(self.store, task):
-                        self.team.request(run, "consult", task["id"], "preflight:" + role, role,
-                            "Inspect accepted inputs and relevant files for " + task["title"] + ". Provide concrete " + ROLES[role][0] +
-                            " guidance, risks and verification needs for this mission. Read only; do not approve gates or register evidence.")
-                    continue
+                if phase == "work" and not prior:
+                    try:
+                        consultants = preflight_roles(self.store, task)
+                        if consultants:
+                            self.team.update(run["id"], status="preparing")
+                            for role in consultants:
+                                self.team.request(run, "consult", task["id"], "preflight:" + role, role,
+                                    "Inspect accepted inputs and relevant files for " + task["title"] + ". Provide concrete " + ROLES[role][0] +
+                                    " guidance, risks and verification needs for this mission. Read only; do not approve gates or register evidence.")
+                            continue
+                    except (WorkflowError, OSError) as exc:
+                        self.team.update(run["id"], status="blocked", reason=str(exc), ended_at=now())
+                        with self.store.db:
+                            self.store.db.execute("UPDATE team_requests SET status='cancelled' WHERE sender_run_id=? AND status='queued'", (run["id"],))
+                        self.admission_failed(task, phase, None, exc, aid)
+                        continue
                 if prior and prior.get("retry_at") is not None:
                     self.team.update(prior["id"], status="superseded", ended_at=now())
                     if phase == "consult":
@@ -1087,12 +1187,21 @@ class Supervisor:
         with supervisor_lock(self.store):
             with runner_lock(self.store):
                 reconcile(self.team, self.client_factory)
+                from .workspaces import reconcile as reconcile_workspaces
+                reconcile_workspaces(self.store)
                 with self.store.db:
                     self.store.db.execute("UPDATE team_supervisor SET stop_requested=0 WHERE id=1")
             self.heartbeat()
             self.team.event("supervisor.started", pid=os.getpid())
             try:
                 while self.tick():
+                    from .supervision import summary
+                    value = summary(self.store)
+                    # No agent turn is spent on unchanged polling/housekeeping.
+                    relevant = json.dumps({key: value[key] for key in ("outcomes", "waits", "pending")}, sort_keys=True)
+                    if relevant != self.last_summary:
+                        self.team.event("coordinator.updated", outcomes=value["outcomes"], waits=value["waits"])
+                        self.last_summary = relevant
                     if once:
                         while self.futures or list(self.prepared()) or self.store.db.execute("SELECT q.id FROM team_requests q JOIN tasks t ON q.task_id=t.id WHERE q.kind='consult' AND q.status='queued' AND q.revision=t.revision LIMIT 1").fetchone():
                             self.cancel.wait(.1)

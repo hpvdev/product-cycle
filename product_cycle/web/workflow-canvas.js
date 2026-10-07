@@ -65,7 +65,7 @@ function hostId(host){return host.id.replace(/[^a-z0-9-]/gi,'')}
 
 function workflowGraph() {
   const groups=[],nodes=[],edges=[],taskNodes=new Map();let y=30;const width=760,gap=100;
-  const stages=Object.keys(phases).map(id=>state.stages.find(stage=>stage.id===id)||{id,title:phases[id],status:'not_required',steps:[]});
+  const stages=state.stages;
   for(let row=0;row<Math.ceil(stages.length/3);row++){
     let maxHeight=0;
     for(let col=0;col<3;col++){

@@ -108,6 +108,27 @@ class ImprovementTests(unittest.TestCase):
         (folder/'SKILL.md').write_text((folder/'SKILL.md').read_text()+'\nLocal customization\n')
         with self.assertRaises(WorkflowError):self.improvements.apply(cid,automatic=False,reason='Synthetic stable-point decision')
 
+    def test_opt_in_shared_guidance_is_imported_only_on_new_install_and_unpublished_on_rollback(self):
+        config = self.store.config
+        config['share_learned_guidance'] = True
+        write_json(self.store.root / 'config.json', config)
+        cid = self.reviewed()
+        self.improvements.apply(cid, automatic=False, reason='Synthetic stable-point decision')
+        from product_cycle.knowledge import read_library
+        entry = read_library(self.store.project)['entries']['product-cycle-design']
+        self.assertEqual(entry['candidate_id'], cid)
+        second = Path(self.temp.name) / 'another-product'
+        second.mkdir()
+        install_skills(second)
+        installed = second / '.agents/skills/product-cycle-design'
+        self.assertEqual((installed / GUIDANCE).read_text(), entry['guidance'])
+        (installed / GUIDANCE).write_text('Project customization')
+        install_skills(second, preserve_existing=True)
+        self.assertEqual((installed / GUIDANCE).read_text(), 'Project customization')
+        self.improvements.rollback(cid)
+        self.assertNotIn('product-cycle-design', read_library(self.store.project)['entries'])
+        self.assertEqual((installed / GUIDANCE).read_text(), 'Project customization')
+
     def test_version_backup_manifest_monitor_and_rollback_survive_restart(self):
         cid=self.reviewed();folder=self.store.project/'.agents/skills/product-cycle-design';before=skill_hashes(folder)
         self.improvements.apply(cid,automatic=False,reason='Synthetic stable-point decision')

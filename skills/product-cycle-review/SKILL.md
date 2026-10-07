@@ -3,7 +3,7 @@ name: product-cycle-review
 description: Independently review a Product Cycle stage and its small-step outputs using real evidence, without modifying files.
 ---
 
-# Review độc lập
+# Independent review
 
 Use fresh context and remain read-only. Assess every C-numbered criterion and every reported S-numbered step against inspected content. When controller evidence is supplied, cite its registered IDs for the relevant output; in a standalone review, cite inspected files without inventing evidence IDs. Distinguish worker claims, controller checks and operator observations. Return actionable rework or blocked findings when support is missing. A completed worker plan does not prove correctness.
 
@@ -29,10 +29,12 @@ For UI design, read [screen specification guidance](../product-cycle-design/refe
 
 ## Company decisions and improvement review
 
-Read the selected policy in the supplied context. With team.enabled and team.policy = autonomous, preserve the human analysis gate and assess later Design Director / Art Director decisions against that accepted scope, their delegated authority and actual reference/evidence. Do not add a human design or final-acceptance gate that this policy does not require, or call a company decision human approval. In supervised mode, preserve existing configured owner gates. Independent review and current-version evidence remain required in both modes.
+Read the selected policy in the supplied context. With team.enabled and team.policy = autonomous, follow context.authority for analysis acceptance and assess later Design Director / Art Director decisions against that accepted scope, their delegated authority and actual reference/evidence. Do not add a human design or final-acceptance gate that this policy does not require, or call a company decision human approval. In supervised mode, preserve existing configured owner gates. Independent review and current-version evidence remain required in both modes.
 
 For an assigned improve_review mission, use [bounded guidance improvement](../product-cycle-improve/SKILL.md) and its experiment contract. Inspect the exact sealed before/after candidate, same raw case outputs, check logs and limitations in fresh read-only context. The Improvement Reviewer is separate from both Skill Engineer and Evaluation Engineer. Reject unsupported benefit, regressions, permission expansion, changed product goals or weaker acceptance; approval is a review result, not permission to edit installed skills or declare adoption.
 
-## Khi sản phẩm là game
+## Game products
 
 If the brief or accepted direction asks for a game, read [Game Design](../product-cycle-game-design/SKILL.md) as a companion to this stage. Use its independent-review guidance as an additional game-design perspective within the assigned criteria. Assess the concept, rules and evidence appropriate to this stage; do not demand finished gameplay at design or claim fun from an image. Keep accepted scope, configured owner gates and evidence boundaries; the companion is not a new stage or an execution command.
+
+For agent_workflow_version=1, read the reviewer context pack and actual source_root. Keep worker claims separate from registered observations; inspect the assigned procedures, source fingerprint and instance. Review integration on canonical source and whole-product evidence on the handoff version. Missing runtime evidence cannot be replaced by a passing build, a screenshot or a confidence score. Review only the task's assigned feature_verification subset; full feature coverage belongs to whole-product verification.

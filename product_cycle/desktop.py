@@ -55,9 +55,12 @@ def prepare(store, tid, review=False, resume=False):
         prior_result = digest(directory / "result.json") if (directory / "result.json").is_file() else None
         prompt_for(store, store.task(tid), directory, review)
         from .contracts import RESULT_SCHEMA, REVIEW_SCHEMA
+        from .dispatch import route
+        selected = route(store, task, phase)
         write_json(directory / "request.json", {"attempt_id": aid, "task_id": tid, "phase": phase,
                    "executor": "codex-desktop", "read_only": review, "title": thread_title(store.config, task, review),
-                   "model": store.config["models"]["review" if review else task["role"]],
+                   "model": {key: selected[key] for key in ("model", "effort")}, "routing": selected,
+                   "source_root": str(store.task_source(task)),
                    "schema": REVIEW_SCHEMA if review else RESULT_SCHEMA,
                    "result_path": str(directory / "result.json"), "prior_result_sha256": prior_result, "prepared_at": now()})
         store.attempt_update(aid, status="queued", ended_at=None)
@@ -79,7 +82,7 @@ def bind(store, tid, aid, thread_id, client_factory=CodexClient):
         return packet(store, attempt)
     with client_factory(Path(attempt["directory"])) as client:
         thread = client.read_thread(thread_id)
-    require(thread.get("id") == thread_id and Path(thread.get("cwd", "")).resolve() == store.project,
+    require(thread.get("id") == thread_id and Path(thread.get("cwd", "")).resolve() in {store.project, store.task_source(tid)},
             "Chat được chọn không thuộc dự án này.")
     # A fresh reviewer may inspect the worker's output, but cannot be that worker.
     conflict = store.db.execute("SELECT task_id,phase FROM attempts WHERE thread_id=? AND id!=?", (thread_id, aid)).fetchall()
@@ -182,5 +185,5 @@ def sync_usage(store, client_factory=CodexClient):
                 thread = client.read_thread(attempt["thread_id"])
         except (WorkflowError, OSError):
             continue  # A missing usage source must not stop result reconciliation for other chats.
-        if thread.get("id") == attempt["thread_id"] and Path(thread.get("cwd", "")).resolve() == store.project:
+        if thread.get("id") == attempt["thread_id"] and Path(thread.get("cwd", "")).resolve() in {store.project, store.task_source(attempt["task_id"])}:
             update_usage(store, attempt, thread)

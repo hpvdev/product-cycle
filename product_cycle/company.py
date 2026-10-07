@@ -76,6 +76,15 @@ def apply_repairs(store):
         elif row["action"] != "repair":
             status = "waiting" if row["action"] == "wait" else "awaiting_answer"
         else:
+            if store.config.get("agent_workflow_version"):
+                applied = store.db.execute("SELECT COUNT(*) FROM company_decisions WHERE task_id=? AND action='repair' AND status='applied'",
+                                           (task["id"],)).fetchone()[0]
+                if applied >= store.config.get("max_repairs", 2):
+                    with store.db:
+                        store.db.execute("UPDATE company_decisions SET status='waiting',reason=? WHERE run_id=?",
+                                         ("Đã đạt giới hạn sửa tự động; cần quyết định cách xử lý nguyên nhân.", row["run_id"]))
+                    store.update(task["id"], reason="Đã đạt giới hạn sửa tự động; cần xử lý nguyên nhân hoặc thay đổi phạm vi có chủ đích.")
+                    continue
             from .team_discussions import pending
             discussion = pending(store, task["id"])
             if discussion and discussion["status"] == "open":

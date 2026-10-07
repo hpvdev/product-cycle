@@ -50,7 +50,7 @@ def reserve(store, run, prior):
                              (run["id"], prior["id"]))
 
 
-def mission(store, run):
+def mission(store, run, client_factory=None, control=None):
     from .runner import context
     row = store.db.execute("SELECT * FROM company_learning WHERE run_id=?", (run["id"],)).fetchone()
     require(row, "Nhiệm vụ cải tiến chưa được phân công.")
@@ -67,8 +67,24 @@ def mission(store, run):
                        "installed learned guidance only, with real evidence and raw reproducible case IDs. Do not change goals, "
                        "permissions, gates, cost or acceptance. Candidate is not applied by this mission. If no substantiated "
                        "improvement is testable, return candidate=null with an honest reason. Never invent failure cases.")
+        if store.config.get("agent_workflow_version"):
+            instruction += (" Raw cases must be sealed JSON artifacts with the genuine prompt, expectations reserved for "
+                            "the judge, and optional files mapping relative fixture paths to text. Do not include credentials "
+                            "or unrelated chats. The controller selects additional held-out cases and runs opaque before/after trials.")
         schema = PROPOSE_SCHEMA
     elif run["phase"] == "improve_evaluate":
+        if store.config.get("agent_workflow_version"):
+            from .learning_trials import run_trials, BLIND_SCHEMA
+            require(client_factory is not None, "Cần runtime được giao để chạy learning trials.")
+            packet = run_trials(improvements, row["candidate_id"], run, client_factory, control)
+            instruction = ("You are an independent blinded evaluator. Inspect both opaque variants against each case's "
+                           "expectations and actual artifacts, including execution trajectory and source. Cite observed proof "
+                           "for each score. Do not infer variant identity or consult author rationale, current installed "
+                           "guidance or other chats. Score both on the same scale. Missing behavior proof is a limitation, "
+                           "not a pass. Return evaluation=null if evidence cannot establish a comparison. The controller "
+                           "resolves variant identity and regressions; scores alone cannot authorize adoption.")
+            write_json(Path(run["directory"]) / "context.json", packet)
+            return instruction + "\n" + json.dumps(packet, ensure_ascii=False), BLIND_SCHEMA
         packet = improvements.evaluation_context(row["candidate_id"])
         instruction = ("Independently forward-test identical raw cases with before and after guidance. Keep original inputs, "
                        "outputs and assessment in your artifact directory, separately for both variants. Do not run real product "
@@ -116,7 +132,11 @@ def complete(team, run, result):
         if candidate["status"] == "evaluating":
             next_phase = "improve_evaluate"
     elif run["phase"] == "improve_evaluate":
-        candidate = improvements.record_evaluation(row["candidate_id"], result[key], run["id"])
+        if store.config.get("agent_workflow_version"):
+            from .learning_trials import record_judgment
+            candidate = record_judgment(improvements, row["candidate_id"], result[key], run["id"])
+        else:
+            candidate = improvements.record_evaluation(row["candidate_id"], result[key], run["id"])
         if candidate["status"] == "evaluated":
             next_phase = "improve_review"
     else:

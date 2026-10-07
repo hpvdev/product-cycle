@@ -3,7 +3,7 @@ name: product-cycle-build
 description: Implement an assigned Product Cycle increment using accepted inputs and report its concrete outputs for verification.
 ---
 
-# Phát triển
+# Build an increment
 
 Inspect direct callsites and applicable instructions. Reproduce bugs before patching. Finish a coherent change before relevant validation. The controller runs approved commands; do not duplicate them in worker mode. Do not expand scope or introduce test infrastructure unless the task needs it.
 
@@ -13,10 +13,10 @@ When invoked on its own, perform only the requested stage in the selected projec
 
 ## Preferred flow
 
-1. Đọc đầu vào và tái hiện: Đọc yêu cầu, mốc thiết kế và code liên quan; tái hiện lỗi nếu đang sửa bug.
-2. Triển khai trong phạm vi: Dùng mẫu hiện có và chỉ sửa phần phục vụ công việc.
-3. Hoàn thiện hành vi và trạng thái: Đáp ứng luồng chính cùng các trường hợp cần thiết.
-4. Đối chiếu thay đổi: Xem lại phần code đã sửa, đầu ra và hạn chế trước khi gửi kiểm chứng.
+1. Read assigned requirements, design and code; reproduce a reported bug when applicable.
+2. Implement within scope using existing patterns.
+3. Complete the required behavior and states.
+4. Inspect changed code, evidence and limitations before controller verification.
 
 For controller-backed work, read [stage contracts](../product-cycle/references/contracts.md). State and sealed evidence belong to the controller; do not edit them. Completion follows evidence and configured decisions, not a worker claim.
 
@@ -40,10 +40,14 @@ In screen-comparisons.json, each status is exactly matched or needs_changes. Act
 
 ## Company assignments and tools
 
-With team.enabled and team.policy = autonomous, use the company-selected accepted design after independently reviewed analysis; retain supervised owner gates in other modes. Do not seek fresh human permission for an already delegated routine implementation choice or represent company acceptance as human approval. The assigned build, frontend, backend, mobile or game_engineer worker implements the same increment contract and shares the one-source-writer boundary; it does not launch additional writers.
+With team.enabled and team.policy = autonomous, use the company-selected accepted design after independently reviewed analysis; retain supervised owner gates in other modes. Do not seek fresh human permission for an already delegated routine implementation choice or represent company acceptance as human approval. The assigned build, frontend, backend, mobile or game_engineer worker implements the same increment contract and writes only its assigned source_root; it does not launch additional writers. Shared source has one writer, while authorized isolated workers use separate roots and controller-owned integration.
 
-When an assigned requirement needs an unavailable native image or browser tool, request it through team_request_capability only when actually exposed. Identify the task, current source and exact required output; return Chờ công cụ: ... for dependent work when waiting is required. Finish independent source work before making the request, then leave source unchanged until the native result is submitted. A queue entry is not output or a passing comparison. The authorized native chat follows [company capability worker](../product-cycle-company-worker/SKILL.md); never fabricate images, captures or activity, and do not turn the plan-level final browser gate into a new blocker on this increment.
+When an assigned requirement needs an unavailable native image or browser tool, request it through team_request_capability only when actually exposed. Identify the task, current source and exact required output; return the exact tool-wait blocker prefix supplied by the controller for dependent work when waiting is required. Finish independent source work before making the request, then leave source unchanged until the native result is submitted. A queue entry is not output or a passing comparison. The authorized native chat follows [company capability worker](../product-cycle-company-worker/SKILL.md); never fabricate images, captures or activity, and do not turn the plan-level final browser gate into a new blocker on this increment.
 
-## Khi sản phẩm là game
+## Game products
 
 If the brief or accepted direction asks for a game, read [Game Design](../product-cycle-game-design/SKILL.md) as a companion to this stage. Use its build guidance to implement accepted game-rule/action sections and art as a playable loop, preserving input, temporal behavior and world consequences. Do not substitute a form or decorative animation for the approved mechanic. Keep accepted scope, configured owner gates and evidence boundaries; the companion is not a new stage or an execution command.
+
+## Assigned workspace and runtime evidence
+
+For agent_workflow_version=1, read the hashed context_pack, assigned features and verification contract. Work in source_root and retain reports in artifact_directory. Exercise the assigned procedures and produce runtime-observations.json with actual source fingerprint, instance, actions, expected/actual outcomes and registered proof. Use pass/fail/blocked honestly. Local verification precedes independent review; integration and whole-product acceptance follow separately. On repair, address the pack's recorded feedback. Refresh current context through team_context when exposed after an owner decision changes; stale context cannot be accepted.

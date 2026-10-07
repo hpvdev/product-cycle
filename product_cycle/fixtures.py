@@ -1,6 +1,7 @@
 """Explicitly synthetic fixtures for controller evaluation and dashboard demos."""
 
 import json
+import copy
 import sys
 
 from .contracts import FILES, work_steps
@@ -18,6 +19,18 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
         filenames = filenames + ["services.json"]
     if task["stage"] == "architecture" and store.config.get("project_setup_required"):
         filenames = filenames + ["project-setup.json"]
+    enhanced = store.config.get("agent_workflow_version")
+    if enhanced and task["stage"] == "architecture":
+        filenames += ["verification.json"]
+    if enhanced and task["role"] in {"build", "integration", "verify"} and not blocker:
+        filenames += ["fixture-observation.json", "runtime-observations.json"]
+        if task["role"] == "build":
+            source = store.task_source(task) / "synthetic.py"
+            source.write_text("print('synthetic controller fixture; not a real product')\n")
+            artifacts.append({"path": str(source.relative_to(store.project)), "purpose": "Synthetic source for controller mechanics",
+                              "criteria": ["C1"], "requirements": task["requirements"]})
+    if enhanced and task["stage"] == "integration" and not blocker:
+        filenames += ["feature-map-update.json"]
     for filename in filenames:
         path = directory / filename
         if filename == "requirements.json":
@@ -29,7 +42,10 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
                 "recommendation": "Phương án minh họa", "quality_targets": [{"description": "Đọc lại thông tin",
                     "verification": "Quan sát tổng hợp", "requirement": "R1"}], "open_questions": []})
         elif filename == "plan.json":
-            value = plan or {"tasks": [{"id": "T1", "title": "Lưu thông tin", "instructions": "Tạo khả năng lưu và đọc", "depends_on": [], "requirements": ["R1"], "criteria": ["Đọc lại dữ liệu đã lưu"], "checks": []}], "verification_commands": [], "browser_required": False}
+            value = copy.deepcopy(plan) if plan else {"tasks": [{"id": "T1", "title": "Lưu thông tin", "instructions": "Tạo khả năng lưu và đọc", "depends_on": [], "requirements": ["R1"], "criteria": ["Đọc lại dữ liệu đã lưu"], "checks": []}], "verification_commands": [], "browser_required": False}
+            if enhanced:
+                for item in value["tasks"]:
+                    item.setdefault("features", ["synthetic"])
             if store.config.get("service_setup_required") and plan is None:
                 value.update(service_ids=[service["id"] for service in store.services()],
                              delivery={"mode": "local", "access": "Bản local minh họa", "instructions": "Hợp đồng minh họa, chưa có sản phẩm thật.", "run_commands": [], "deferred": ["VPS và phát hành ra ngoài"]})
@@ -39,6 +55,35 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
             if store.config.get("screen_design_required") and plan is None:
                 value["tasks"][0]["screen_targets"] = []
             write_json(path, value)
+        elif filename == "verification.json":
+            write_json(path, {"version": 1, "surface": "cli",
+                "environment": {"runtime": "synthetic", "requirements": [], "instance_policy": "isolated"},
+                "launch": {"commands": [], "instructions": "Synthetic fixture only", "ready": "No product is claimed"},
+                "doctor": {"commands": [], "instructions": "Synthetic contract", "read_only": True},
+                "cleanup": {"commands": [], "instructions": "Preserve fixture evidence", "preserve_evidence": True},
+                "procedures": [{"id": "synthetic-record", "actions": ["Synthetic record"], "expected": ["Synthetic result"], "evidence": ["Synthetic fixture record"], "commands": []}]})
+        elif filename == "feature-map.json":
+            write_json(path, {"version": 1, "features": [{"id": "synthetic", "name": "Synthetic feature", "purpose": "Controller test only",
+                "requirements": ["R1"], "depends_on": [], "screen_states": [], "code_entry_points": [],
+                "implementation_status": "planned", "verification": ["synthetic-record"]}]})
+        elif filename == "fixture-observation.json":
+            write_json(path, {"synthetic": True, "scope": "Controller mechanics only; no real product/provider observation"})
+        elif filename == "runtime-observations.json":
+            from .features import task_features
+            proof = str((directory / "fixture-observation.json").relative_to(store.project))
+            value = {"version": 1, "source_fingerprint": store.task_fingerprint(task),
+                "environment": {"runtime": "synthetic", "instance": "fixture", "surface": "cli"},
+                "features": [{"id": feature["id"], "status": "pass", "observations": [{"procedure": procedure,
+                    "action": "Synthetic action", "expected": "Synthetic result", "actual": "Synthetic controller fixture",
+                    "evidence": [proof]} for procedure in feature["verification"]]} for feature in task_features(store, task)]}
+            if task["stage"] == "verify":
+                value["whole_product"] = {category: {"status": "pass", "reason": "Synthetic controller case only", "evidence": [proof]}
+                    for category in ("main_journey", "cross_feature", "ux_consistency", "visual_consistency", "performance", "error_recovery")}
+            write_json(path, value)
+        elif filename == "feature-map-update.json":
+            from .features import task_features
+            write_json(path, {"version": 1, "features": [{"id": feature["id"], "implementation_status": "observed",
+                "code_entry_points": ["synthetic.py"]} for feature in task_features(store, task)]})
         elif filename == "services.json":
             write_json(path, {"services": services or []})
         elif filename == "project-setup.json":
@@ -84,7 +129,7 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
         return store.task(tid)
     from .runner import run_checks
     run_checks(store, store.task(tid), aid, directory)
-    store.update(tid, fingerprint=fingerprint(store.project))
+    store.update(tid, fingerprint=store.task_fingerprint(task))
     review_id, review_dir = store.begin(tid, "review")
     records = store.current_evidence(tid)
     review = {"decision": review_decision, "summary": "Review tổng hợp để kiểm tra cơ chế chuyển trạng thái.",
@@ -103,5 +148,6 @@ def complete_fixture(store, tid, approve=True, plan=None, review_decision="appro
 
 
 def prepare_plan(store, plan=None):
-    for tid in ["analysis", "design", "architecture", "plan"]:
+    stages = ["analysis", "design", "architecture"] + (["feature_map"] if store.config.get("agent_workflow_version") else []) + ["plan"]
+    for tid in stages:
         complete_fixture(store, tid, plan=plan if tid == "plan" else None)

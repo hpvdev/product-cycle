@@ -116,6 +116,8 @@ def task_progress(task, tasks, config, events, decisions, root):
 def stage_progress(tasks, config):
     stages = []
     for stage in STAGES:
+        if stage in {"feature_map", "integration"} and not config.get("agent_workflow_version"):
+            continue
         children = [task for task in tasks if task["stage"] == stage and task["status"] != "superseded"]
         if stage == "setup" and not children and not config.get("service_setup_required"):
             continue

@@ -76,6 +76,9 @@ def install_skills(project, preserve_existing=False):
                 continue
             installed.append(target)
             shutil.copytree(source, target)
+            if source.name.startswith("product-cycle"):
+                from .knowledge import import_guidance
+                import_guidance(project, target)
         for source in sources:
             target = destination / source.name
             current = skill_hashes(target)

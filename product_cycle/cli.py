@@ -31,9 +31,11 @@ def parser():
     init.add_argument("--max-cycle-tokens", type=int, help="Ngân sách token toàn quy trình; mặc định chỉ theo dõi")
     init.add_argument("--effort", choices=["low", "medium", "high", "xhigh", "max", "ultra"],
                       help="Dùng effort này cho mọi bước thay cho cấu hình theo vai trò")
-    for name in ["onboard", "bootstrap", "install-skills", "update-skills", "uninstall-skills", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress", "supervise", "team-stop", "team-status", "team-answer", "company-work", "company-claim", "company-bind", "company-submit", "company-stop", "company-improvements", "company-rollback"]:
+    for name in ["onboard", "bootstrap", "install-skills", "update-skills", "uninstall-skills", "upgrade-workflow", "status", "run", "work", "review", "decide", "reopen", "pause", "resume", "recover", "sync", "continue", "serve", "package", "browser-evidence", "judge", "configure", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress", "supervise", "team-stop", "team-status", "team-answer", "company-work", "company-claim", "company-bind", "company-submit", "company-stop", "company-improvements", "company-rollback"]:
         cmd = sub.add_parser(name)
         cmd.add_argument("--project", required=True)
+        if name == "upgrade-workflow":
+            cmd.add_argument("--apply", action="store_true", help="Nâng cấp hợp đồng khi idle; mặc định xem ảnh hưởng")
         if name == "onboard":
             cmd.add_argument("--name", help="Tên văn phòng hoặc dự án mới")
             cmd.add_argument("--open", action="store_true", help="Mở dashboard local; chưa chạy nhân viên")
@@ -51,6 +53,9 @@ def parser():
         if name in {"work", "review", "decide", "reopen", "browser-evidence", "judge", "sync", "continue", "owner-input", "desktop-bind", "desktop-submit", "desktop-progress"}:
             cmd.add_argument("--task", required=True)
         if name == "configure":
+            cmd.add_argument("--share-learned-guidance", choices=["on", "off"], help="Chia sẻ guidance đã review cho các project cài mới trên máy")
+            cmd.add_argument("--routing-file", help="JSON profiles runtime/model/capability đã được chọn")
+            cmd.add_argument("--workspace-mode", choices=["shared", "isolated"], help="Chọn workspace cho feature builders")
             cmd.add_argument("--executor", choices=["codex-desktop", "codex-app-server"])
             cmd.add_argument("--team-mode", choices=["on", "off"])
             cmd.add_argument("--team-concurrency", type=int)
@@ -69,6 +74,8 @@ def parser():
             cmd.add_argument("--file", required=True)
         if name == "company-stop":
             cmd.add_argument("--reason", required=True)
+        if name == "company-improvements":
+            cmd.add_argument("--reconcile-trials", action="store_true", help="Đọc đúng thread/turn của trial gián đoạn; không chạy lại")
         if name == "company-rollback":
             cmd.add_argument("--candidate", required=True)
         if name == "supervise":
@@ -237,6 +244,10 @@ def main(argv=None):
         store = Store(args.project)
         if args.command == "status":
             print(json.dumps(store.snapshot(), ensure_ascii=False, indent=2))
+        elif args.command == "upgrade-workflow":
+            from .authority import upgrade
+            with runner_lock(store):
+                print(json.dumps(upgrade(store, args.apply), ensure_ascii=False, indent=2))
         elif args.command == "supervise":
             from .team import Supervisor
             print("Product Cycle: điều phối nhóm đang chạy; dashboard chỉ theo dõi.", flush=True)
@@ -254,7 +265,17 @@ def main(argv=None):
             from . import capability_jobs
             from .improvements import ImprovementStore
             if args.command == "company-improvements":
-                result = ImprovementStore(store).snapshot()
+                improvements = ImprovementStore(store)
+                if args.reconcile_trials:
+                    from .learning_trials import reconcile_trials
+                    from .team import supervisor_active
+                    from .codex import CodexClient
+                    with runner_lock(store):
+                        require(not supervisor_active(store), "Dừng supervisor trước khi đối chiếu learning trials.")
+                        observed = reconcile_trials(improvements, CodexClient)
+                    result = dict(improvements.snapshot(), reconciled_trials=observed)
+                else:
+                    result = improvements.snapshot()
             elif args.command == "company-rollback":
                 result = ImprovementStore(store).rollback(args.candidate)
             else:
@@ -288,9 +309,27 @@ def main(argv=None):
                     print(json.dumps(outcome, ensure_ascii=False, indent=2))
         elif args.command == "configure":
             with runner_lock(store):
-                require(args.executor is not None or args.team_mode is not None or args.team_policy is not None or args.team_concurrency is not None, "Chọn cách vận hành cần cập nhật.")
+                require(args.executor is not None or args.team_mode is not None or args.team_policy is not None or args.team_concurrency is not None
+                        or args.routing_file is not None or args.workspace_mode is not None or args.share_learned_guidance is not None,
+                        "Chọn cách vận hành cần cập nhật.")
                 require(not store.db.execute("SELECT id FROM attempts WHERE status IN ('running','queued')").fetchone(),
                         "Kết thúc hoặc khôi phục phiên đang chạy trước khi đổi nơi thực thi.")
+                require(not store.db.execute("SELECT id FROM team_runs WHERE status IN ('preparing','dispatching','running','checking','unknown','backoff')").fetchone(),
+                        "Kết thúc hoặc đối chiếu các phiên nhóm trước khi đổi cấu hình.")
+                if args.routing_file is not None or args.workspace_mode is not None or args.share_learned_guidance is not None:
+                    from .dispatch import validate_profiles
+                    config = store.config
+                    if args.routing_file is not None:
+                        config["routing"] = validate_profiles(json.loads(Path(args.routing_file).read_text()))
+                    if args.workspace_mode is not None:
+                        require(config.get("agent_workflow_version"), "Nâng cấp workflow trước khi chọn workspace mode.")
+                        require(not store.db.execute("SELECT task_id FROM workspaces WHERE status IN ('creating','ready','reviewed','integrating','conflict')").fetchone(),
+                                "Giữ workspace mode cho đến khi các thay đổi đã tích hợp.")
+                        config["workspace_mode"] = args.workspace_mode
+                    if args.share_learned_guidance is not None:
+                        config["share_learned_guidance"] = args.share_learned_guidance == "on"
+                    write_json(store.root / "config.json", config)
+                    store.event(None, "execution.configured", {"routing": config.get("routing"), "workspace_mode": config.get("workspace_mode", "shared")})
                 if args.team_mode is not None or args.team_policy is not None or args.team_concurrency is not None:
                     from .team import configure
                     require(args.executor in {None, "codex-app-server"} or args.team_mode == "off", "Nhóm AI dùng executor app-server.")

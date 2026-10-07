@@ -46,13 +46,15 @@ class OnboardingTests(unittest.TestCase):
 
     def test_request_activates_analysis_without_approving_or_changing_policy(self):
         models, team = self.store.config['models'], self.store.config['team']
+        original_gate = self.store.owner_gate(self.store.task('analysis'))
         with runner_lock(self.store):
             submit_request(self.store, 'Build a game to practise recalling familiar words.')
         self.assertFalse(self.store.config['awaiting_request'])
         self.assertEqual(self.store.db.execute("SELECT value FROM meta WHERE key='state'").fetchone()[0], 'active')
         self.assertEqual(self.store.config['models'], models)
         self.assertEqual(self.store.config['team'], team)
-        self.assertTrue(self.store.owner_gate(self.store.task('analysis')))
+        self.assertEqual(self.store.owner_gate(self.store.task('analysis')), original_gate)
+        self.assertFalse(original_gate)  # New explicitly autonomous company policy.
         self.assertEqual(self.store.task('analysis')['status'], 'pending')
         self.assertEqual(self.store.db.execute('SELECT COUNT(*) FROM decisions').fetchone()[0], 0)
         with self.assertRaises(WorkflowError):
